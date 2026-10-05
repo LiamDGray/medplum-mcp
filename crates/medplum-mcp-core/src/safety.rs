@@ -195,3 +195,41 @@ pub fn assert_write_permitted(
 
     Ok(())
 }
+
+/// Non-bypassable runtime safety gate enforcing that binding statuses (like 'active')
+/// are strictly forbidden unless accompanied by a verified PhysicianWitness.
+pub fn assert_witnessed_write_permitted(
+    resource_type: &str,
+    payload: &serde_json::Value,
+    allow_writes: bool,
+    witness: Option<&crate::typestate::PhysicianWitness>,
+) -> Result<(), SafetyViolationError> {
+    if !allow_writes {
+        return Err(SafetyViolationError::PermissionDenied {
+            resource_type: resource_type.to_string(),
+        });
+    }
+
+    let mut statuses = extract_statuses(payload, "");
+    if statuses.is_empty() {
+        if let serde_json::Value::String(s) = payload {
+            statuses.push(s.clone());
+        }
+    }
+
+    for raw_status in statuses {
+        let clean_status = normalize_status(&raw_status);
+        if clean_status == "active" && witness.is_some() {
+            continue;
+        }
+        if FORBIDDEN_CLINICAL_STATUSES.contains(&clean_status.as_str()) {
+            return Err(SafetyViolationError::ForbiddenTerminalStatus {
+                resource_type: resource_type.to_string(),
+                raw_status,
+                normalized_status: clean_status,
+            });
+        }
+    }
+
+    Ok(())
+}

@@ -5,11 +5,14 @@
 
 use std::time::Duration;
 
-use medplum_mcp_core::safety::{assert_write_permitted, SafetyViolationError};
+use medplum_mcp_core::safety::{
+    assert_witnessed_write_permitted, assert_write_permitted, SafetyViolationError,
+};
 use medplum_mcp_core::secret::SecretString;
 use medplum_mcp_core::token_diet::{
     distill_raw_slice, distill_resource, DetailLevel, TokenDietError,
 };
+use medplum_mcp_core::typestate::PhysicianWitness;
 use serde_json::{json, Value};
 
 use crate::sandbox::ClinicalSandbox;
@@ -531,6 +534,42 @@ impl MedplumClient {
         if self.demo_mode {
             let sb = self.sandbox.as_ref().expect("sandbox present in demo mode");
             let saved = sb.create_medication_resource(resource)?;
+            return Ok(saved);
+        }
+
+        let resp = self
+            .execute_live_request(
+                reqwest::Method::POST,
+                "/fhir/R4/MedicationRequest",
+                None,
+                Some(&resource),
+            )
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        let body: Value = resp.json().await?;
+        Ok(body)
+    }
+
+    pub async fn issue_medication_order(
+        &self,
+        resource: Value,
+        witness: &PhysicianWitness,
+    ) -> Result<Value, ClientError> {
+        if !self.allow_writes {
+            return Err(ClientError::WritesBlocked);
+        }
+        assert_witnessed_write_permitted("MedicationRequest", &resource, true, Some(witness))?;
+
+        if self.demo_mode {
+            let sb = self.sandbox.as_ref().expect("sandbox present in demo mode");
+            let saved = sb.create_medication_order_with_witness(resource, witness)?;
             return Ok(saved);
         }
 

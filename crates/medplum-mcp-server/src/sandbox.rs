@@ -10,7 +10,10 @@ use medplum_mcp_core::rkyv_clinical::{
     archive_clinical_dataset, ArchivedClinicalDataset, ArchivedObservation, ArchivedPatient,
     ClinicalDataset, MedicationRecord, ObservationRecord, PatientRecord,
 };
-use medplum_mcp_core::safety::{assert_write_permitted, SafetyViolationError};
+use medplum_mcp_core::safety::{
+    assert_witnessed_write_permitted, assert_write_permitted, SafetyViolationError,
+};
+use medplum_mcp_core::typestate::PhysicianWitness;
 use serde_json::{json, Value};
 
 static DRAFT_COUNTER: AtomicU64 = AtomicU64::new(1000);
@@ -664,6 +667,45 @@ impl ClinicalSandbox {
         }
         if !obj.contains_key("intent") {
             obj.insert("intent".to_string(), Value::String("order".to_string()));
+        }
+
+        let saved = Value::Object(obj.clone());
+        let mut lock = match self.inner.write() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        lock.medications.push(saved.clone());
+        Ok(saved)
+    }
+
+    pub fn create_medication_order_with_witness(
+        &self,
+        mut resource: Value,
+        witness: &PhysicianWitness,
+    ) -> Result<Value, SafetyViolationError> {
+        assert_witnessed_write_permitted("MedicationRequest", &resource, true, Some(witness))?;
+
+        let obj =
+            resource
+                .as_object_mut()
+                .ok_or_else(|| SafetyViolationError::PermissionDenied {
+                    resource_type: "MedicationRequest".to_string(),
+                })?;
+
+        obj.insert(
+            "resourceType".to_string(),
+            Value::String("MedicationRequest".to_string()),
+        );
+
+        if !obj.contains_key("id")
+            || obj
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .is_empty()
+        {
+            let id = format!("med-{}", DRAFT_COUNTER.fetch_add(1, Ordering::SeqCst));
+            obj.insert("id".to_string(), Value::String(id));
         }
 
         let saved = Value::Object(obj.clone());

@@ -65,7 +65,11 @@ async fn test_mcp_tools_list_registers_16_clinical_tools() {
     let resp: Value = serde_json::from_str(&resp_str).expect("valid json");
 
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 16, "Must register exactly 16 clinical tools");
+    assert_eq!(
+        tools.len(),
+        18,
+        "Must register clinical and elicitation tools"
+    );
 
     let expected_tools = [
         "medplum_search_patients",
@@ -573,7 +577,7 @@ async fn test_stdio_streaming_transport() {
     );
     let resp2: Value = serde_json::from_str(&line2).unwrap();
     assert_eq!(resp2["id"], 2);
-    assert_eq!(resp2["result"]["tools"].as_array().unwrap().len(), 16);
+    assert_eq!(resp2["result"]["tools"].as_array().unwrap().len(), 18);
 
     let _ = server_handle.await;
 }

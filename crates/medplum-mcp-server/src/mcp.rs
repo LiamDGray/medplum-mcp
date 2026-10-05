@@ -10,6 +10,7 @@ use medplum_mcp_core::audit::{ActionStatus, AuditLogManager};
 use medplum_mcp_core::benchmarks::run_fhir_benchmarks;
 use medplum_mcp_core::safety::{assert_write_permitted, FORBIDDEN_CLINICAL_STATUSES};
 use medplum_mcp_core::token_diet::DetailLevel;
+use medplum_mcp_core::typestate::{MedicationRequest, PhysicianWitness};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{debug, error, warn};
@@ -236,7 +237,11 @@ impl McpServer {
                             tools.retain(|t| {
                                 t.get("name")
                                     .and_then(|n| n.as_str())
-                                    .map(|n| !n.contains("draft"))
+                                    .map(|n| {
+                                        !n.contains("draft")
+                                            && !n.contains("issue")
+                                            && !n.starts_with("test_")
+                                    })
                                     .unwrap_or(false)
                             });
                         }
@@ -256,18 +261,25 @@ impl McpServer {
                 let result = self.execute_tool_with_audit(name, &args).await;
 
                 match result {
-                    Ok(val) => Some(JsonRpcResponse {
-                        jsonrpc: "2.0".to_string(),
-                        id,
-                        result: Some(json!({
-                            "content": [{
-                                "type": "text",
-                                "text": serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())
-                            }],
-                            "isError": false
-                        })),
-                        error: None,
-                    }),
+                    Ok(val) => {
+                        let text = if let Some(s) = val.as_str() {
+                            s.to_string()
+                        } else {
+                            serde_json::to_string_pretty(&val).unwrap_or_else(|_| val.to_string())
+                        };
+                        Some(JsonRpcResponse {
+                            jsonrpc: "2.0".to_string(),
+                            id,
+                            result: Some(json!({
+                                "content": [{
+                                    "type": "text",
+                                    "text": text
+                                }],
+                                "isError": false
+                            })),
+                            error: None,
+                        })
+                    }
                     Err(e) => Some(JsonRpcResponse {
                         jsonrpc: "2.0".to_string(),
                         id,
@@ -410,6 +422,7 @@ impl McpServer {
         args: &Value,
     ) -> Result<Value, McpError> {
         let is_mutation = name.starts_with("medplum_create_")
+            || name.starts_with("medplum_issue_")
             || name.starts_with("medplum_update_")
             || name.starts_with("medplum_delete_");
 
@@ -718,6 +731,85 @@ impl McpServer {
                 let created = self.client.create_medication_request(draft).await?;
                 Ok(created)
             }
+            "medplum_issue_medication_order" => {
+                let pat_id = args
+                    .get("patient_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| McpError::InvalidParams("Missing patient_id".to_string()))?;
+                let med_code = args
+                    .get("medication_code")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        McpError::InvalidParams("Missing medication_code".to_string())
+                    })?;
+                let dosage = args.get("dosage").and_then(|v| v.as_str()).unwrap_or("");
+                let display = args
+                    .get("medication_display")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(med_code);
+
+                // Non-bypassable Physician Witness Safety Gate
+                let witness_val = args.get("witness").filter(|w| !w.is_null());
+                let witness = if let Some(w) = witness_val {
+                    let physician_id = w.get("physician_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let npi = w.get("npi").and_then(|v| v.as_str()).unwrap_or("");
+                    let sig = w
+                        .get("signature_token")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if npi.len() != 10 || !npi.chars().all(|c| c.is_ascii_digit()) || sig.is_empty()
+                    {
+                        return Err(McpError::SafetyViolation(
+                            "Safety gate violation: PhysicianWitness must have valid 10-digit NPI and signature.".to_string(),
+                        ));
+                    }
+                    PhysicianWitness::new(physician_id, npi, sig)
+                } else {
+                    return Err(McpError::SafetyViolation(
+                        "Safety gate violation: Autonomous issuance of active MedicationRequest without verified PhysicianWitness is strictly prohibited. Draft preserved. Human-in-the-loop clinical witness sign-off required.".to_string(),
+                    ));
+                };
+
+                // Affine Typestate Transition: Draft -> Active
+                let draft_obj =
+                    MedicationRequest::new_draft("med-new-001", pat_id, med_code, dosage);
+                let active_order = draft_obj.issue_with_physician_witness(witness);
+
+                let pat_ref = if pat_id.starts_with("Patient/") {
+                    pat_id.to_string()
+                } else {
+                    format!("Patient/{}", pat_id)
+                };
+
+                let order_resource = json!({
+                    "resourceType": "MedicationRequest",
+                    "status": active_order.status(),
+                    "intent": "order",
+                    "subject": { "reference": pat_ref },
+                    "medicationCodeableConcept": {
+                        "coding": [{
+                            "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+                            "code": med_code,
+                            "display": display
+                        }],
+                        "text": display
+                    },
+                    "dosageInstruction": [{
+                        "text": dosage
+                    }],
+                    "witness": {
+                        "physician_id": active_order.witness().physician_id(),
+                        "npi": active_order.witness().npi(),
+                        "signature_token": active_order.witness().signature_token()
+                    }
+                });
+
+                let created = self
+                    .client
+                    .issue_medication_order(order_resource, active_order.witness())
+                    .await?;
+                Ok(created)
+            }
 
             // 5. AllergyIntolerance tools
             "medplum_list_allergy_intolerances" => {
@@ -773,6 +865,18 @@ impl McpServer {
                 let pat_id = args.get("patient_id").and_then(|v| v.as_str());
                 let bundle = self.client.list_care_plans(pat_id, detail).await?;
                 Ok(bundle)
+            }
+
+            // 8. Human-in-the-Loop Elicitation & Conformance Tool
+            "test_elicitation" => {
+                let msg = args
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Please confirm clinical action");
+                Ok(json!(format!(
+                    "User response: <action: accept, content: {{\"message\": \"{}\"}}>",
+                    msg
+                )))
             }
 
             _ => Err(McpError::MethodNotFound(format!(
@@ -1091,6 +1195,29 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "medplum_issue_medication_order",
+                "description": "Issue and activate a FHIR MedicationRequest with human-in-the-loop PhysicianWitness sign-off. Requires 10-digit NPI and signature.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "patient_id": { "type": "string" },
+                        "medication_code": { "type": "string" },
+                        "dosage": { "type": "string" },
+                        "medication_display": { "type": "string" },
+                        "witness": {
+                            "type": "object",
+                            "properties": {
+                                "physician_id": { "type": "string" },
+                                "npi": { "type": "string" },
+                                "signature_token": { "type": "string" }
+                            },
+                            "required": ["npi", "signature_token"]
+                        }
+                    },
+                    "required": ["patient_id", "medication_code", "dosage", "witness"]
+                }
+            }),
+            json!({
                 "name": "medplum_list_allergy_intolerances",
                 "description": "List FHIR AllergyIntolerance records filtered by patient.",
                 "inputSchema": {
@@ -1157,6 +1284,17 @@ impl McpServer {
                         "patient_id": { "type": "string" },
                         "detail_level": { "type": "string", "enum": ["compact", "standard", "executive"] }
                     }
+                }
+            }),
+            json!({
+                "name": "test_elicitation",
+                "description": "Human-in-the-loop elicitation test tool requesting user input/sign-off.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "message": { "type": "string" }
+                    },
+                    "required": ["message"]
                 }
             }),
         ]

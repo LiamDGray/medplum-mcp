@@ -109,7 +109,7 @@ async fn test_tool_discovery_filtering_prevents_context_bloat() {
     let resp_all: serde_json::Value =
         serde_json::from_str(&server.handle_jsonrpc_message(&list_all_req).await.unwrap()).unwrap();
     let tools_all = resp_all["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools_all.len(), 16);
+    assert_eq!(tools_all.len(), 18);
 
     // 2. Filter by category "drafts" returns only the 2 mutation tools
     let list_drafts_req = json!({
