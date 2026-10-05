@@ -88,6 +88,19 @@ pub enum ClientType {
     All,
 }
 
+/// Audit ledger storage format (jsonl, binary, dual).
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum AuditFormat {
+    #[default]
+    #[value(name = "jsonl")]
+    Jsonl,
+    #[value(name = "binary")]
+    Binary,
+    #[value(name = "dual")]
+    Dual,
+}
+
 /// Arguments for `serve` subcommand.
 #[derive(Args, Debug, Clone)]
 pub struct ServeArgs {
@@ -115,13 +128,17 @@ pub struct ServeArgs {
     #[arg(long, default_value = "https://api.medplum.com")]
     pub base_url: String,
 
-    /// Path to append-only HIPAA cryptographic audit flight recorder (.jsonl)
+    /// Path to append-only HIPAA cryptographic audit flight recorder (.jsonl or .bin)
     #[arg(long)]
     pub audit_log: Option<PathBuf>,
 
     /// Secret key for HMAC-SHA256 audit ledger signatures
     #[arg(long, default_value = "default-medplum-audit-key")]
     pub audit_key: String,
+
+    /// Format for audit flight recorder (jsonl, binary, or dual)
+    #[arg(long, default_value = "jsonl", value_enum)]
+    pub audit_format: AuditFormat,
 }
 
 /// Arguments for `mock-server` subcommand.

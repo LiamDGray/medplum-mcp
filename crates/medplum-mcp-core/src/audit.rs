@@ -247,7 +247,7 @@ pub fn compute_entry_signature(
 
 /// Thread-safe, append-only cryptographic flight recorder for HIPAA audit trails.
 pub struct AuditLogManager {
-    log_path: PathBuf,
+    log_path: Option<PathBuf>,
     binary_path: Option<PathBuf>,
     secret_key: Vec<u8>,
     last_sequence_id: u64,
@@ -256,6 +256,7 @@ pub struct AuditLogManager {
 }
 
 impl AuditLogManager {
+    /// Create a standard JSONL append-only audit log manager.
     pub fn new(log_path: impl AsRef<Path>, secret_key: &[u8]) -> Result<Self, AuditError> {
         let path = log_path.as_ref().to_path_buf();
         let mut last_sequence_id = 0;
@@ -278,13 +279,73 @@ impl AuditLogManager {
         }
 
         Ok(Self {
-            log_path: path,
+            log_path: Some(path),
             binary_path: None,
             secret_key: secret_key.to_vec(),
             last_sequence_id,
             last_signature,
             last_binary_signature: [0u8; 32],
         })
+    }
+
+    /// Create a pure zero-copy binary (.bin) audit log manager.
+    pub fn new_binary(
+        binary_path: impl AsRef<Path>,
+        secret_key: &[u8],
+    ) -> Result<Self, AuditError> {
+        let path = binary_path.as_ref().to_path_buf();
+        let mut last_sequence_id = 0;
+        let last_signature = GENESIS_PREV_SIGNATURE.to_string();
+        let mut last_binary_signature = [0u8; 32];
+
+        if path.exists() {
+            if let Ok(meta) = std::fs::metadata(&path) {
+                let len = meta.len();
+                if len >= 120 && len % 120 == 0 {
+                    if let Ok(mut f) = File::open(&path) {
+                        use std::io::{Read, Seek, SeekFrom};
+                        if f.seek(SeekFrom::End(-120)).is_ok() {
+                            let mut buf = [0u8; 120];
+                            if f.read_exact(&mut buf).is_ok() {
+                                if let Ok(hdr) = BinaryAuditHeader::read_from_bytes(&buf) {
+                                    last_sequence_id = hdr.sequence_id;
+                                    last_binary_signature = hdr.signature;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            log_path: None,
+            binary_path: Some(path),
+            secret_key: secret_key.to_vec(),
+            last_sequence_id,
+            last_signature,
+            last_binary_signature,
+        })
+    }
+
+    /// Create a dual-mode audit log manager writing both JSONL and zero-copy binary logs simultaneously.
+    pub fn new_dual(
+        jsonl_path: impl AsRef<Path>,
+        binary_path: impl AsRef<Path>,
+        secret_key: &[u8],
+    ) -> Result<Self, AuditError> {
+        let mgr = Self::new(jsonl_path, secret_key)?;
+        Ok(mgr.with_binary_log(binary_path))
+    }
+
+    /// Primary JSONL log path (if configured).
+    pub fn log_path(&self) -> Option<&Path> {
+        self.log_path.as_deref()
+    }
+
+    /// Secondary or standalone binary log path (if configured).
+    pub fn binary_path(&self) -> Option<&Path> {
+        self.binary_path.as_deref()
     }
 
     /// Configure a secondary zero-copy binary audit log (.bin) written concurrently with .jsonl.
@@ -354,18 +415,20 @@ impl AuditLogManager {
             payload: payload.cloned(),
         };
 
-        if let Some(parent) = self.log_path.parent() {
-            std::fs::create_dir_all(parent)?;
+        if let Some(log_path) = &self.log_path {
+            if let Some(parent) = log_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_path)?;
+
+            let serialized = serde_json::to_string(&entry)?;
+            writeln!(file, "{serialized}")?;
+            file.flush()?;
         }
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.log_path)?;
-
-        let serialized = serde_json::to_string(&entry)?;
-        writeln!(file, "{serialized}")?;
-        file.flush()?;
 
         if let Some(bin_path) = &self.binary_path {
             if let Some(parent) = bin_path.parent() {
@@ -418,23 +481,47 @@ impl AuditLogManager {
     }
 
     pub fn get_entries(&self) -> Result<Vec<AuditEntry>, AuditError> {
-        if !self.log_path.exists() {
-            return Ok(Vec::new());
-        }
-
-        let file = File::open(&self.log_path)?;
-        let reader = BufReader::new(file);
-        let mut entries = Vec::new();
-
-        for line_res in reader.lines() {
-            let line = line_res?;
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                entries.push(serde_json::from_str::<AuditEntry>(trimmed)?);
+        if let Some(log_path) = &self.log_path {
+            if !log_path.exists() {
+                return Ok(Vec::new());
             }
+
+            let file = File::open(log_path)?;
+            let reader = BufReader::new(file);
+            let mut entries = Vec::new();
+
+            for line_res in reader.lines() {
+                let line = line_res?;
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    entries.push(serde_json::from_str::<AuditEntry>(trimmed)?);
+                }
+            }
+
+            return Ok(entries);
         }
 
-        Ok(entries)
+        if let Some(bin_path) = &self.binary_path {
+            if !bin_path.exists() {
+                return Ok(Vec::new());
+            }
+
+            let mut file = File::open(bin_path)?;
+            use std::io::Read;
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)?;
+            let mut entries = Vec::new();
+
+            for chunk in buf.as_chunks::<120>().0 {
+                if let Ok(hdr) = BinaryAuditHeader::read_from_bytes(chunk) {
+                    entries.push(AuditEntry::from_binary_header(&hdr, "audit_event"));
+                }
+            }
+
+            return Ok(entries);
+        }
+
+        Ok(Vec::new())
     }
 }
 

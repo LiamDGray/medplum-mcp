@@ -10,7 +10,7 @@ use medplum_mcp_server::sandbox::ClinicalSandbox;
 use tokio::net::TcpListener;
 use tracing::info;
 
-use crate::cli::{MockServerArgs, ServeArgs, Transport};
+use crate::cli::{AuditFormat, MockServerArgs, ServeArgs, Transport};
 
 /// Run the MCP server with stdio or SSE transport.
 pub async fn run_serve(args: ServeArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -24,10 +24,30 @@ pub async fn run_serve(args: ServeArgs) -> Result<(), Box<dyn std::error::Error 
 
     let audit_manager = if let Some(audit_path) = args.audit_log {
         info!(
-            "Enabling HIPAA HMAC-SHA256 audit flight recorder at {:?}",
-            audit_path
+            "Enabling HIPAA HMAC-SHA256 audit flight recorder at {:?} (format: {:?})",
+            audit_path, args.audit_format
         );
-        let mgr = AuditLogManager::new(audit_path, args.audit_key.as_bytes())?;
+        let key = args.audit_key.as_bytes();
+        let mgr = match args.audit_format {
+            AuditFormat::Jsonl => AuditLogManager::new(audit_path, key)?,
+            AuditFormat::Binary => {
+                let bin_path = if audit_path.extension().is_some_and(|ext| ext == "jsonl") {
+                    audit_path.with_extension("bin")
+                } else {
+                    audit_path
+                };
+                AuditLogManager::new_binary(bin_path, key)?
+            }
+            AuditFormat::Dual => {
+                let is_bin = audit_path.extension().is_some_and(|ext| ext == "bin");
+                let (jsonl_path, bin_path) = if is_bin {
+                    (audit_path.with_extension("jsonl"), audit_path)
+                } else {
+                    (audit_path.clone(), audit_path.with_extension("bin"))
+                };
+                AuditLogManager::new_dual(jsonl_path, bin_path, key)?
+            }
+        };
         Some(Arc::new(Mutex::new(mgr)))
     } else {
         None
