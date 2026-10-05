@@ -146,6 +146,11 @@ impl BinaryAuditHeader {
         mac.update(&all_bytes[0..96]);
         mac.verify_slice(&self.signature).is_ok()
     }
+
+    /// Verifies that a given payload slice matches the recorded `payload_digest`.
+    pub fn verify_payload(&self, payload: &[u8]) -> bool {
+        compute_payload_digest(payload) == self.payload_digest
+    }
 }
 
 /// Computes a standard SHA-256 payload digest.
@@ -266,6 +271,29 @@ impl MachineFlightRecorder {
     pub fn corrupt_frame_for_test(&mut self, index: usize) {
         if let Some(frame) = self.frames.get_mut(index) {
             frame.raw_value = frame.raw_value.wrapping_add(1);
+        }
+    }
+
+    /// Helper for testing: flips a specific bit in a frame's signature.
+    pub fn flip_signature_bit_for_test(&mut self, frame_idx: usize, byte_idx: usize, bit_idx: u8) {
+        if let Some(frame) = self.frames.get_mut(frame_idx) {
+            if byte_idx < 32 {
+                frame.signature[byte_idx] ^= 1 << (bit_idx % 8);
+            }
+        }
+    }
+
+    /// Helper for testing: flips a specific bit in a frame's previous signature.
+    pub fn flip_prev_signature_bit_for_test(
+        &mut self,
+        frame_idx: usize,
+        byte_idx: usize,
+        bit_idx: u8,
+    ) {
+        if let Some(frame) = self.frames.get_mut(frame_idx) {
+            if byte_idx < 32 {
+                frame.prev_signature[byte_idx] ^= 1 << (bit_idx % 8);
+            }
         }
     }
 }
