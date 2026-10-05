@@ -677,3 +677,16 @@ fn test_tui_headless_execution() {
         "Headless TUI app must execute and exit cleanly"
     );
 }
+
+#[test]
+fn test_cli_parsing_openapi() {
+    let args = vec!["medplum-mcp-rs", "openapi", "--overlay"];
+    let cli = Cli::try_parse_from(args).expect("Should parse openapi with overlay");
+    match cli.command {
+        Commands::Openapi(o) => {
+            assert!(o.overlay);
+            assert!(o.output.is_none());
+        }
+        _ => panic!("Expected Openapi command"),
+    }
+}

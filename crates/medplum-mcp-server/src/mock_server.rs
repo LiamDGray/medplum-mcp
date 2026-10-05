@@ -102,6 +102,33 @@ async fn oauth_token() -> impl IntoResponse {
     (StatusCode::OK, headers, Json(body))
 }
 
+/// RFC 9728 OAuth 2.0 Protected Resource Metadata endpoint.
+async fn oauth_protected_resource() -> impl IntoResponse {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+
+    let body = json!({
+        "resource": "https://api.medplum.com/fhir/R4",
+        "authorization_servers": ["https://api.medplum.com/oauth2"],
+        "scopes_supported": [
+            "openid",
+            "profile",
+            "email",
+            "fhirUser",
+            "patient/*.read",
+            "patient/*.write",
+            "user/*.read"
+        ],
+        "bearer_methods_supported": ["header"],
+        "resource_documentation": "https://docs.medplum.com"
+    });
+
+    (StatusCode::OK, headers, Json(body))
+}
+
 async fn search_patients(
     State(sandbox): State<ClinicalSandbox>,
     Query(params): Query<HashMap<String, String>>,
@@ -296,6 +323,10 @@ async fn list_care_plans(
 /// Create the Axum application router configured with all FHIR R4 mock routes.
 pub fn create_mock_router(sandbox: ClinicalSandbox) -> Router {
     Router::new()
+        .route(
+            "/.well-known/oauth-protected-resource",
+            get(oauth_protected_resource),
+        )
         .route("/oauth2/token", post(oauth_token))
         .route("/fhir/R4/Patient", get(search_patients))
         .route("/fhir/R4/Patient/{id}", get(get_patient))

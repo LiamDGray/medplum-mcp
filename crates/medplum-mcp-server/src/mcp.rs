@@ -193,8 +193,50 @@ impl McpServer {
                     None
                 }
             }
+            "notifications/cancelled" => {
+                if let Some(audit_mgr) = &self.audit_manager {
+                    if let Ok(mut mgr) = audit_mgr.lock() {
+                        let _ = mgr.log_event(
+                            "notifications/cancelled",
+                            ActionStatus::Allowed,
+                            Some(&params),
+                        );
+                    }
+                }
+                if id.is_some() {
+                    Some(JsonRpcResponse {
+                        jsonrpc: "2.0".to_string(),
+                        id,
+                        result: Some(json!({"cancelled": true})),
+                        error: None,
+                    })
+                } else {
+                    None
+                }
+            }
             "tools/list" => {
-                let tools = self.list_tools();
+                let mut tools = self.list_tools();
+                if let Some(cat) = params.get("category").and_then(|v| v.as_str()) {
+                    match cat {
+                        "drafts" | "mutation" | "write" => {
+                            tools.retain(|t| {
+                                t.get("name")
+                                    .and_then(|n| n.as_str())
+                                    .map(|n| n.contains("draft"))
+                                    .unwrap_or(false)
+                            });
+                        }
+                        "query" | "read" => {
+                            tools.retain(|t| {
+                                t.get("name")
+                                    .and_then(|n| n.as_str())
+                                    .map(|n| !n.contains("draft"))
+                                    .unwrap_or(false)
+                            });
+                        }
+                        _ => {}
+                    }
+                }
                 Some(JsonRpcResponse {
                     jsonrpc: "2.0".to_string(),
                     id,
@@ -1146,5 +1188,89 @@ impl McpServer {
                 ]
             }),
         ]
+    }
+
+    /// Export the server's registered tools as an OpenAPI 3.1.0 specification.
+    ///
+    /// When `with_overlay` is true, injects OpenAPI Overlay Specification 1.0
+    /// attributes and AI-friendly docstrings ("Use when: ...") into operation descriptions.
+    pub fn export_openapi_spec(&self, with_overlay: bool) -> Value {
+        let tools = self.list_tools();
+        let mut paths = serde_json::Map::new();
+
+        for tool in tools {
+            let name = tool.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let clean_name = name.strip_prefix("medplum_").unwrap_or(name);
+            let raw_desc = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let schema = tool
+                .get("inputSchema")
+                .cloned()
+                .unwrap_or(json!({"type": "object"}));
+
+            let description = if with_overlay {
+                format!(
+                    "{}\n\nUse when: Autonomous or human-in-the-loop agent requires {}.",
+                    raw_desc,
+                    raw_desc.to_lowercase()
+                )
+            } else {
+                raw_desc.to_string()
+            };
+
+            let mut op = json!({
+                "summary": raw_desc,
+                "description": description,
+                "operationId": name,
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": schema
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Tool invocation result",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            if with_overlay {
+                op["x-ai-use-when"] = json!(format!(
+                    "When clinical workflows require {}",
+                    raw_desc.to_lowercase()
+                ));
+            }
+
+            let path_obj = json!({
+                "post": op
+            });
+
+            paths.insert(format!("/tools/{}", clean_name), path_obj.clone());
+            if clean_name != name {
+                paths.insert(format!("/tools/{}", name), path_obj);
+            }
+        }
+
+        json!({
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Medplum Clinical MCP Server API",
+                "version": self.version,
+                "description": "High-Assurance HL7 FHIR Model Context Protocol (MCP) Server"
+            },
+            "paths": paths
+        })
     }
 }

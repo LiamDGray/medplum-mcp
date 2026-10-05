@@ -93,6 +93,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Tui(args) => {
             medplum_mcp_cli::tui::run_tui_app(&args)?;
         }
+        Commands::Openapi(args) => {
+            let sandbox = medplum_mcp_server::sandbox::ClinicalSandbox::new_st_jude();
+            let client = medplum_mcp_server::client::MedplumClient::new_demo(sandbox);
+            let server = medplum_mcp_server::mcp::McpServer::new(client, None, false);
+            let spec = server.export_openapi_spec(args.overlay);
+            let json_str = serde_json::to_string_pretty(&spec)?;
+            if let Some(path) = &args.output {
+                std::fs::write(path, &json_str)?;
+                eprintln!(
+                    "Successfully exported OpenAPI 3.1 specification to {}",
+                    path.display()
+                );
+            } else {
+                println!("{}", json_str);
+            }
+        }
     }
 
     Ok(())

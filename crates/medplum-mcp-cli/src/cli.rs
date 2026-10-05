@@ -39,6 +39,9 @@ pub enum Commands {
 
     /// Launch the live interactive 60 FPS terminal dashboard (Ratatui TUI)
     Tui(TuiArgs),
+
+    /// Export the MCP tools as an OpenAPI 3.1.0 specification with optional Overlay 1.0 annotations
+    Openapi(OpenapiArgs),
 }
 
 /// Transport protocol for MCP communication.
@@ -247,4 +250,16 @@ pub struct TuiArgs {
     /// Run for a fixed number of headless render ticks (used for testing and CI)
     #[arg(long)]
     pub headless_ticks: Option<u64>,
+}
+
+/// Arguments for `openapi` specification export subcommand.
+#[derive(Args, Debug, Clone)]
+pub struct OpenapiArgs {
+    /// Inject OpenAPI Overlay 1.0 AI-friendly docstrings ("Use when: ...")
+    #[arg(long, default_value_t = false)]
+    pub overlay: bool,
+
+    /// Output path to write the JSON specification (defaults to stdout)
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
 }
