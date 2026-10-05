@@ -1,0 +1,41 @@
+[package]
+name = "medplum-mcp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1.0"
+tokio = { version = "1", features = ["full"] }
+zerocopy = "0.8"
+
+[dependencies.medplum-mcp-core]
+path = "../crates/medplum-mcp-core"
+
+[dependencies.medplum-mcp-server]
+path = "../crates/medplum-mcp-server"
+
+[[bin]]
+name = "fuzz_simd_distillation"
+path = "fuzz_targets/fuzz_simd_distillation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_binary_audit_header"
+path = "fuzz_targets/fuzz_binary_audit_header.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_jsonrpc_dispatch"
+path = "fuzz_targets/fuzz_jsonrpc_dispatch.rs"
+test = false
+doc = false
+bench = false
