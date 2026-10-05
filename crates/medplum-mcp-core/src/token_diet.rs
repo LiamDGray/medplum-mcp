@@ -41,6 +41,8 @@ impl fmt::Display for DetailLevel {
 pub enum TokenDietError {
     #[error("Invalid detail level: '{0}'. Must be one of: 'compact', 'standard', 'executive'")]
     InvalidDetailLevel(String),
+    #[error("Unsupported resource type for SIMD distillation: '{0}'")]
+    UnsupportedResourceType(String),
 }
 
 impl FromStr for DetailLevel {
