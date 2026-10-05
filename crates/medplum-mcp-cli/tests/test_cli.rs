@@ -6,12 +6,14 @@ use std::path::PathBuf;
 use clap::Parser;
 use medplum_mcp_cli::bench::run_micro_benchmarks;
 use medplum_mcp_cli::cli::{
-    BenchArgs, Cli, ClientType, Commands, ConfigArgs, OutputFormat, Transport, VerifyArgs,
+    AuditFormat, BenchArgs, Cli, ClientType, Commands, ConfigArgs, OutputFormat, Transport,
+    VerifyArgs,
 };
 use medplum_mcp_cli::config::generate_client_config;
 use medplum_mcp_cli::verify::run_verification;
 use medplum_mcp_core::audit::{
-    compute_entry_signature, compute_payload_digest, ActionStatus, GENESIS_PREV_SIGNATURE,
+    compute_entry_signature, compute_payload_digest, ActionStatus, AuditLogManager,
+    GENESIS_PREV_SIGNATURE,
 };
 use serde_json::json;
 use tempfile::NamedTempFile;
@@ -59,9 +61,107 @@ fn test_cli_parsing_serve() {
             assert!(s.allow_writes);
             assert_eq!(s.base_url, "https://custom.medplum.org");
             assert_eq!(s.audit_key, "secret-key-123");
+            assert_eq!(s.audit_format, AuditFormat::Jsonl);
         }
         _ => panic!("Expected Serve command"),
     }
+}
+
+#[test]
+fn test_cli_parsing_serve_audit_format() {
+    let args_default = vec!["medplum-mcp-rs", "serve"];
+    let cli = Cli::try_parse_from(args_default).expect("parse default");
+    match cli.command {
+        Commands::Serve(s) => assert_eq!(s.audit_format, AuditFormat::Jsonl),
+        _ => panic!("Expected Serve command"),
+    }
+
+    let args_bin = vec![
+        "medplum-mcp-rs",
+        "serve",
+        "--audit-log",
+        "/tmp/audit.bin",
+        "--audit-format",
+        "binary",
+    ];
+    let cli = Cli::try_parse_from(args_bin).expect("parse binary format");
+    match cli.command {
+        Commands::Serve(s) => {
+            assert_eq!(s.audit_format, AuditFormat::Binary);
+            assert_eq!(s.audit_log, Some(PathBuf::from("/tmp/audit.bin")));
+        }
+        _ => panic!("Expected Serve command"),
+    }
+
+    let args_dual = vec![
+        "medplum-mcp-rs",
+        "serve",
+        "--audit-log",
+        "/tmp/audit.jsonl",
+        "--audit-format",
+        "dual",
+    ];
+    let cli = Cli::try_parse_from(args_dual).expect("parse dual format");
+    match cli.command {
+        Commands::Serve(s) => {
+            assert_eq!(s.audit_format, AuditFormat::Dual);
+            assert_eq!(s.audit_log, Some(PathBuf::from("/tmp/audit.jsonl")));
+        }
+        _ => panic!("Expected Serve command"),
+    }
+}
+
+#[test]
+fn test_serve_audit_format_initialization_and_verification() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let key = b"test-secret-key-audit-format";
+
+    // 1. Pure binary mode
+    let bin_path = temp_dir.path().join("audit.bin");
+    let mut bin_mgr = AuditLogManager::new_binary(&bin_path, key).expect("new_binary");
+    bin_mgr
+        .log_event(
+            "test_tool_binary",
+            ActionStatus::Allowed,
+            Some(&json!({"patient": "123"})),
+        )
+        .expect("log_event binary");
+    assert!(bin_path.exists());
+    assert_eq!(std::fs::metadata(&bin_path).unwrap().len(), 120);
+
+    let bin_entries = bin_mgr.get_entries().expect("get_entries from binary");
+    assert_eq!(bin_entries.len(), 1);
+    assert_eq!(bin_entries[0].sequence_id, 1);
+    assert_eq!(bin_entries[0].action_status, ActionStatus::Allowed);
+
+    let bin_report =
+        AuditLogManager::verify_binary_audit_log(&bin_path, key).expect("verify binary audit log");
+    assert!(bin_report.is_valid);
+    assert_eq!(bin_report.verified_count, 1);
+
+    // 2. Dual mode
+    let dual_jsonl = temp_dir.path().join("dual.jsonl");
+    let dual_bin = temp_dir.path().join("dual.bin");
+    let mut dual_mgr = AuditLogManager::new_dual(&dual_jsonl, &dual_bin, key).expect("new_dual");
+    dual_mgr
+        .log_event(
+            "test_tool_dual",
+            ActionStatus::Allowed,
+            Some(&json!({"patient": "456"})),
+        )
+        .expect("log_event dual");
+    assert!(dual_jsonl.exists());
+    assert!(dual_bin.exists());
+    assert_eq!(std::fs::metadata(&dual_bin).unwrap().len(), 120);
+
+    let json_entries = dual_mgr.get_entries().expect("get_entries");
+    assert_eq!(json_entries.len(), 1);
+    assert_eq!(json_entries[0].tool_name, "test_tool_dual");
+
+    let bin_dual_report = AuditLogManager::verify_binary_audit_log(&dual_bin, key)
+        .expect("verify dual binary audit log");
+    assert!(bin_dual_report.is_valid);
+    assert_eq!(bin_dual_report.verified_count, 1);
 }
 
 #[test]
