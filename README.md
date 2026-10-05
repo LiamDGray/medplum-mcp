@@ -7,7 +7,10 @@
 [![MCP Spec](https://img.shields.io/badge/MCP-2.3.0%20(FastMCP)-06b6d4?style=flat-square)](https://modelcontextprotocol.io)
 [![Standard](https://img.shields.io/badge/HAMCP-Tier--4%20Clinical%20Safety-purple?style=flat-square)](docs/ARCHITECTURE.md)
 [![Deterministic Safety](https://img.shields.io/badge/Safety%20Barrier-Zero%20Unauthorized%20Mutations-success?style=flat-square)](docs/ARCHITECTURE.md)
-[![Soak Tested](https://img.shields.io/badge/Soak%20Test-723M%20ops%20%7C%200%20viols-brightgreen?style=flat-square)](docs/ARCHITECTURE.md#10-empirical-90-minute-soak-telemetry)
+[![Soak Tested](https://img.shields.io/badge/Soak%20Test-723M%20ops%20%7C%200%20viols-brightgreen?style=flat-square)](docs/ARCHITECTURE.md#7-the-5-tier-verification--quality-assurance-pipeline)
+[![libFuzzer ASAN](https://img.shields.io/badge/Fuzzing-libFuzzer%20%2B%20ASAN-blueviolet?style=flat-square)](docs/VERIFICATION.md#3-tier-2-coverage-guided-fuzzing-libfuzzer--asan)
+[![Miri Certified](https://img.shields.io/badge/Miri-UB%20%26%20Provenance%20Certified-darkgreen?style=flat-square)](docs/VERIFICATION.md#5-tier-4-undefined-behavior-analysis-miri)
+[![Kani Verified](https://img.shields.io/badge/Kani-Formally%20Verified%20(CBMC)-indigo?style=flat-square)](docs/VERIFICATION.md#6-tier-5-static-formal-verification-kani-model-checker)
 
 > **medplum-mcp** provides a hardened, deterministic Model Context Protocol (MCP) server connecting frontier AI agents to HL7 FHIR R4 Electronic Health Record (EHR) repositories. Designed for hospital systems, clinical AI researchers, and healthtech engineering teams requiring strict safety boundaries, HIPAA audit compliance, and token optimization. Built natively in dual-stack **Python & Zero-Copy Rust**.
 
@@ -22,44 +25,45 @@
 3. **Zero-Copy Pipe Transport & Axum HTTP Streaming**:
    High-throughput streaming over Linux pipes (`splice(2)` / `vmsplice(2)`) for stdio IPC with Claude Desktop/Cursor without user-space buffer copies, combined with production Axum SSE/HTTP transport with native `rustls`.
 4. **Cryptographic HMAC-SHA256 Flight Recorder**:
-   Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements.
-5. **Deterministic Safety Verification**:
-   The safety perimeter enforces non-bypassable runtime status filtering and Unicode NFKC normalization, guaranteeing that external agents cannot transition clinical orders into executable states without human clinician witness. For internal Rust development, affine typestates (`MedicationRequest<Draft>`) provide structural compile-time safety.
-6. **Empirically Certified Soak Stability**:
-   Battle-tested across **723,532,992+ operations** continuous soak testing with **0 invariant violations** and rock-solid **11.4 MB RSS**.
+   Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements. Configurable in standard JSONL or high-throughput 120-byte C-ABI binary frames (`--audit-format binary`, 75.2% disk reduction).
+5. **Rkyv Zero-Copy Immutable Snapshot Cache**:
+   High-frequency query path lookups in **10.3 ns** (392.8x faster than Serde deserialization).
+6. **5-Tier Formal Verification & Quality Pipeline**:
+   Verified by continuous soak testing (723M+ operations, 11.4 MB RSS), coverage-guided fuzzing (`libFuzzer` + `AddressSanitizer`), property-based testing (`proptest`), Undefined Behavior detection (`Miri`), and static bounded model checking (`Kani` with CBMC solver).
 7. **Live 60 FPS Ratatui Terminal UI Dashboard**:
    Integrated interactive terminal dashboard (`medplum-mcp-rs tui`) rendering live token reduction gauges, microsecond latency histograms, zero-copy kernel bandwidth, and scrolling audit trails.
 
-
 ---
 
-## Architecture Overview
+## System Architecture
 
+### Mermaid Diagram
 ```mermaid
 flowchart TD
     subgraph Agents["Frontier Clinical AI Agents"]
         Claude[Claude Desktop / Claude Code]
-        Cursor[Cursor IDE]
-        Windsurf[Windsurf Cascade]
-        Other[Pi Agent / Hermes / Codex]
+        Cursor[Cursor IDE / Windsurf]
+        Other[Enterprise LLM Gateway / Pi Agent]
     end
 
-    subgraph Server["medplum-mcp (FastMCP Runtime)"]
-        Gate["assert_clinical_write_permitted\n(Pillar 1: Safety Gate)"]
-        Vault["Multi-Vault Secret Isolation\n(Pillar 2: Zero-Leak Credentials)"]
-        Distill["3-Tier Token Distillation Engine\n(Pillar 3: 89-95% Token Diet)"]
-        Audit["HMAC-SHA256 Flight Recorder\n(Pillar 4: Tamper-Evident Chain)"]
+    subgraph Server["medplum-mcp-rs (Zero-Copy Engine)"]
+        Gate["assert_write_permitted\n(Pillar 1: Safety Gate & NFKC)"]
+        Vault["SecretString Enclave\n(Pillar 2: Zero-Leak Credentials)"]
+        Distill["In-Situ SIMD Distillation\n(Pillar 3: 89-95% Token Diet)"]
+        Audit["HMAC Flight Recorder\n(Pillar 4: Dual JSONL/120B Binary)"]
+        Cache["Rkyv Snapshot Cache\n(10.3 ns Zero-Copy Lookups)"]
     end
 
     subgraph DataPlane["FHIR Data Plane"]
         Sandbox["St. Jude In-Memory Sandbox\n(--demo mode)"]
-        Mock["OpenAPI 3.0 Mock Server\n(medplum-mcp mock-server)"]
+        Mock["OpenAPI 3.0 Mock Server\n(medplum-mcp-rs mock-server)"]
         Medplum["Medplum Cloud / On-Premise FHIR API"]
     end
 
-    Agents -->|Tool Request| Gate
+    Agents -->|JSON-RPC via Linux Pipes / SSE| Gate
     Gate -->|403 Blocked| Audit
     Gate -->|Permitted Draft| Vault
+    Vault --> Cache
     Vault --> Sandbox
     Vault --> Mock
     Vault --> Medplum
@@ -68,6 +72,47 @@ flowchart TD
     Medplum -->|Raw FHIR JSON| Distill
     Distill -->|Distilled Payload| Audit
     Audit -->|Chained Response| Agents
+```
+
+### Precision ASCII Diagram
+```
++-----------------------------------------------------------------------------------------+
+|                                SYSTEM ARCHITECTURE (ASCII)                              |
++-----------------------------------------------------------------------------------------+
+|                                                                                         |
+|   [ Clinical AI Agents ] (Claude Desktop, Claude Code, Cursor, Windsurf, Pi Agent)      |
+|              |                                                                          |
+|              | JSON-RPC 2.0 via anonymous Linux pipes (vmsplice/splice) or SSE/HTTP     |
+|              v                                                                          |
+|   +---------------------------------------------------------------------------------+   |
+|   |                         MEDPLUM CLINICAL MCP SERVER                             |   |
+|   |                                                                                 |   |
+|   |   [ Pillar 1: Non-Bypassable Runtime Safety Gate ]                              |   |
+|   |   - Blocks terminal states: active, completed, cancelled, final                |   |
+|   |   - Unicode NFKC normalization + Cyrillic/Greek homoglyph evasion defense       |   |
+|   |   - Affine Typestates: MedicationRequest<Draft> requires PhysicianWitness       |   |
+|   |                                                                                 |   |
+|   |   [ Pillar 2: Zero-Leak Credential & PHI Enclave ]                              |   |
+|   |   - Multi-vault resolver (1Password, AWS Secrets Manager, HashiCorp Vault)      |   |
+|   |   - SecretString wraps secrets; scrubs bearer tokens and sensitive URIs         |   |
+|   |                                                                                 |   |
+|   |   [ Pillar 3: Three-Tier In-Situ SIMD Distiller ]                               |   |
+|   |   - distill_raw_slice(&mut [u8]) parses HTTP responses with 0 Serde heap allocs |   |
+|   |   - 89% - 95% token diet: Compact (15KB), Standard (31KB), Executive (23KB)     |   |
+|   |                                                                                 |   |
+|   |   [ Pillar 4: Dual-Format Cryptographic Flight Recorder ]                       |   |
+|   |   - Chained HMAC-SHA256 signatures: Seq : Time : Status : Hash : PrevSig        |   |
+|   |   - Fixed 120-byte C-ABI binary frames (--audit-format binary, 75.2% savings)   |   |
+|   |                                                                                 |   |
+|   |   [ In-Memory Zero-Copy Rkyv Snapshot Cache ]                                   |   |
+|   |   - 10.3 ns zero-deserialization lookups (392.8x faster than Serde Value)       |   |
+|   +---------------------------------------------------------------------------------+   |
+|         |                     |                            |                   |        |
+|         | Outbound REST       | Zero-Copy Lookups          | Mock REST         | Append |
+|         v                     v                            v                   v        |
+|   [ Medplum Cloud ]   [ St. Jude Sandbox ]         [ OpenAPI Mock ]     [ Audit Ledger ]|
+|   (FHIR R4 API)       (Pediatric Oncology)         (Axum Server)        (JSONL + Binary)|
++-----------------------------------------------------------------------------------------+
 ```
 
 ---
