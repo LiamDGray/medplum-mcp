@@ -233,16 +233,15 @@ The network engine (`crates/medplum-mcp-server/src/network_zero_copy.rs`) elimin
 
 ---
 
-## 9. Formal Mathematical Verification
+## 9. Formal Mathematical Verification & Typestates
 
-The system is mathematically proven across three complementary verification technologies:
+The system enforces safety across complementary verification technologies:
 
-1. **Lean 4 Proofs** ([`formal/MedplumSafety.lean`](../formal/MedplumSafety.lean) & [`formal/ZeroCopyCorrectness.lean`](../formal/ZeroCopyCorrectness.lean)):
-   - `trace_preserves_safety`: Inductive proof that no reachable state contains an active medication request without clinician sign-off.
-   - `transmute_soundness`: Proof that aligned memory buffers with exact layout match transmute to `#[repr(C)]` references without undefined behavior.
-   - `concurrent_reads_race_free`: Proof that simultaneous readers over shared zero-copy slices commute without data races.
+1. **Compile-Time Affine Typestates** ([`crates/medplum-mcp-core/src/typestate.rs`](../crates/medplum-mcp-core/src/typestate.rs)):
+   - Linear typestates guarantee at compile time that an agent cannot transition an order from `Draft` to `Active` without consuming a non-forgeable `PhysicianWitness` capability token.
+   - Preserves state machine integrity via Rust's linear affine type system.
 2. **TLA+ Formal Specifications** ([`formal/fhir_safety.tla`](../formal/fhir_safety.tla) & [`formal/zerocopy_concurrency.tla`](../formal/zerocopy_concurrency.tla)):
-   - Temporal logic invariants proving `NoUseAfterFree`, `NoDataRaces`, and `MonotonicSequence` across concurrent worker threads.
+   - Temporal logic invariants proving `ZeroUnauthorizedPrescriptions`, `NoUseAfterFree`, `NoDataRaces`, and `MonotonicSequence` across concurrent worker threads.
 3. **Automated Bounded Model Checking (Z3 SMT & BFS)**:
    - Evaluates reachability theorems across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
    - Explores $>1,000$ traces up to depth $k=20$, proving `UNSAT` for terminal reachability under MCP tool invocation.

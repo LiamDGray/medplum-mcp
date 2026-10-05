@@ -6,7 +6,7 @@
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue?style=flat-square)](LICENSE)
 [![MCP Spec](https://img.shields.io/badge/MCP-2.3.0%20(FastMCP)-06b6d4?style=flat-square)](https://modelcontextprotocol.io)
 [![Standard](https://img.shields.io/badge/HAMCP-Tier--4%20Clinical%20Safety-purple?style=flat-square)](docs/ARCHITECTURE.md)
-[![Formal Verification](https://img.shields.io/badge/Formal%20Proof-Lean%204%20%7C%20TLA%2B%20%7C%20Z3-success?style=flat-square)](formal/)
+[![Formal Verification](https://img.shields.io/badge/Formal%20Verification-TLA%2B%20%7C%20Z3%20SMT-success?style=flat-square)](formal/)
 [![Soak Tested](https://img.shields.io/badge/Soak%20Test-723M%20ops%20%7C%200%20viols-brightgreen?style=flat-square)](docs/ARCHITECTURE.md#10-empirical-90-minute-soak-telemetry)
 
 > **medplum-mcp** provides a hardened, deterministic Model Context Protocol (MCP) server connecting frontier AI agents to HL7 FHIR R4 Electronic Health Record (EHR) repositories. Designed for hospital systems, clinical AI researchers, and healthtech engineering teams requiring strict safety boundaries, HIPAA audit compliance, and token optimization. Built natively in dual-stack **Python & Zero-Copy Rust**.
@@ -23,8 +23,8 @@
    Streams static bundles via `sendfile(2)` and `splice(2)` with **Kernel TLS (kTLS)** hardware NIC offload; routes dynamic payloads $\ge 10$ KB via `MSG_ZEROCOPY` page pinning with scatter-gather DMA.
 4. **Cryptographic HMAC-SHA256 Flight Recorder**:
    Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements.
-5. **Tri-Partite Formal Safety Verification**:
-   The safety barrier is mathematically proven via inductive theorem proving in **Lean 4**, temporal logic model checking in **TLA+**, and automated bounded model checking via **Microsoft Z3 SMT**.
+5. **Formal Safety Verification & Typestates**:
+   The safety barrier is verified via temporal logic model checking in **TLA+**, compile-time affine typestates in Rust, and automated bounded constraint verification via **Microsoft Z3 SMT**.
 6. **Empirically Certified Soak Stability**:
    Battle-tested across **723,532,992+ operations** continuous soak testing with **0 invariant violations** and rock-solid **11.4 MB RSS**.
 7. **Live 60 FPS Ratatui Terminal UI Dashboard**:
@@ -116,7 +116,7 @@ medplum-mcp-rs soak --duration-secs 5400 --workers 16
 # Run empirical microsecond performance benchmarks
 medplum-mcp-rs bench
 
-# Cryptographically verify HIPAA HMAC audit ledger & Lean 4 / Z3 formal invariants
+# Cryptographically verify HIPAA HMAC audit ledger & TLA+ / Z3 formal invariants
 medplum-mcp-rs verify --strict
 ```
 
@@ -216,8 +216,6 @@ medplum-mcp verify --strict --output-format terminal
 - [Deployment & Operations Guide (`docs/DEPLOYMENT.md`)](docs/DEPLOYMENT.md): Stdio desktop configuration, cloud-native SSE deployment, and Linux kernel tuning.
 - [Empirical Performance Benchmarks (`docs/RUST_BENCHMARKS.md`)](docs/RUST_BENCHMARKS.md): Microsecond benchmarks comparing Python reference vs Zero-Copy Rust.
 - [Technical Whitepaper & Verification Report (`docs/whitepaper.md`)](docs/whitepaper.md): Mathematical proofs and clinical hazard analysis proving zero unauthorized prescriptions.
-- [Lean 4 Safety Proof (`formal/MedplumSafety.lean`)](formal/MedplumSafety.lean): Inductive proof theorem (`trace_preserves_safety`).
-- [Lean 4 Zero-Copy Concurrency Proof (`formal/ZeroCopyCorrectness.lean`)](formal/ZeroCopyCorrectness.lean): Inductive proof of zero-copy transmutation soundness and race-free concurrent reading.
 - [TLA+ Safety Specification (`formal/fhir_safety.tla`)](formal/fhir_safety.tla): Formal temporal logic specification of the clinical safety barrier.
 - [TLA+ Concurrency Specification (`formal/zerocopy_concurrency.tla`)](formal/zerocopy_concurrency.tla): Temporal logic specification of multi-worker asynchronous kernel zero-copy DMA.
 - [Interactive HTML Demo Console (`docs/demo/index.html`)](docs/demo/index.html): Standalone, zero-CDN interactive demonstration application.

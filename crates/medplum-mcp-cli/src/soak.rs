@@ -105,7 +105,8 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         if tally_path.exists() {
             if let Ok(content) = std::fs::read_to_string(tally_path) {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(dist) = val.get("distillation_operations").and_then(|v| v.as_u64()) {
+                    if let Some(dist) = val.get("distillation_operations").and_then(|v| v.as_u64())
+                    {
                         metrics.total_distillations.store(dist, Ordering::SeqCst);
                     }
                     if let Some(safe) = val.get("safety_checks").and_then(|v| v.as_u64()) {
@@ -154,7 +155,11 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
     let dur_display = if indefinite {
         "Indefinite (∞)".to_string()
     } else {
-        format!("{}s ({:.1} min)", args.duration_secs, (args.duration_secs as f64) / 60.0)
+        format!(
+            "{}s ({:.1} min)",
+            args.duration_secs,
+            (args.duration_secs as f64) / 60.0
+        )
     };
     println!(
         "{}",
@@ -181,7 +186,11 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         log_file,
         "=== SOAK TEST STARTED AT {} | TARGET DURATION: {} ===",
         chrono::Utc::now().to_rfc3339(),
-        if indefinite { "INDEFINITE".to_string() } else { format!("{}s", args.duration_secs) }
+        if indefinite {
+            "INDEFINITE".to_string()
+        } else {
+            format!("{}s", args.duration_secs)
+        }
     )?;
 
     // Spawn Worker Threads

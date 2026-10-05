@@ -23,7 +23,6 @@ class TestDocumentationSuite:
         assert "docs/ARCHITECTURE.md" in content or "docs/ARCHITECTURE" in content
         assert "docs/whitepaper.md" in content or "docs/whitepaper" in content
         assert "formal/fhir_safety.tla" in content
-        assert "formal/MedplumSafety.lean" in content
         assert "docs/demo/index.html" in content or "docs/demo" in content
 
         # Check for architectural diagrams / sections
@@ -91,12 +90,12 @@ class TestDocumentationSuite:
             or "Proving Zero Unauthorized Prescriptions" in content
         )
         assert "TLA+" in content or "TLA" in content
-        assert "Lean 4" in content or "Lean" in content
+        assert "Typestate" in content or "typestate" in content or "affine" in content.lower()
         assert "Inductive" in content or "SMT" in content or "Z3" in content
 
 
 class TestFormalSpecifications:
-    """Verifies TLA+ and Lean 4 formal specifications."""
+    """Verifies TLA+ formal specifications."""
 
     def test_tla_spec_exists_and_valid(self) -> None:
         tla_path = REPO_ROOT / "formal" / "fhir_safety.tla"
@@ -111,21 +110,6 @@ class TestFormalSpecifications:
         assert "Spec" in content
         assert "ZeroUnauthorizedPrescription" in content or "SafetyInvariant" in content
         assert "====" in content
-
-    def test_lean4_spec_exists_and_valid(self) -> None:
-        lean_path = REPO_ROOT / "formal" / "MedplumSafety.lean"
-        assert lean_path.exists(), "formal/MedplumSafety.lean must exist"
-        content = lean_path.read_text(encoding="utf-8")
-        assert len(content) > 500, "Lean 4 spec must be complete"
-
-        # Check required Lean 4 theorem and types
-        theorem_declared = (
-            "theorem trace_preserves_safety" in content or "def trace_preserves_safety" in content
-        )
-        assert theorem_declared, "Lean 4 theorem trace_preserves_safety must be declared"
-        assert "inductive" in content.lower()
-        assert "MedicationRequest" in content or "Resource" in content
-        assert "State" in content or "Transition" in content
 
 
 class TestInteractiveDemoConsole:
@@ -182,4 +166,4 @@ class TestInteractiveDemoConsole:
 
         # Verification explorer components
         assert "Z3" in content or "SMT" in content
-        assert "Lean 4" in content or "trace_preserves_safety" in content
+        assert "TLA+" in content or "fhir_safety" in content

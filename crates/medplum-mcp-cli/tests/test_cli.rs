@@ -452,11 +452,20 @@ fn test_soak_execution_with_tally_file() {
         serde_json::from_str(&tally_content).expect("Tally file must be valid JSON");
 
     assert!(
-        tally_json.get("total_operations").unwrap().as_u64().unwrap() > 0,
+        tally_json
+            .get("total_operations")
+            .unwrap()
+            .as_u64()
+            .unwrap()
+            > 0,
         "Total operations in tally must be > 0"
     );
     assert_eq!(
-        tally_json.get("invariant_violations").unwrap().as_u64().unwrap(),
+        tally_json
+            .get("invariant_violations")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
         0,
         "Violations in tally must be 0"
     );

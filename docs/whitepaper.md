@@ -10,7 +10,7 @@
 
 As Large Language Models (LLMs) and autonomous agents are granted tool-use capabilities to interact directly with Electronic Health Record (EHR) systems via protocols such as the Model Context Protocol (MCP), the blast radius of model hallucinations expands from misinformation to direct clinical harm. An unconstrained autonomous agent with write access to an HL7 FHIR datastore could issue or activate lethal medication orders, alter critical allergy records, or trigger unapproved chemotherapy infusions. 
 
-In this paper, we present the formal verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. We prove through three orthogonal formal methods—**TLA+ temporal logic model checking**, **Lean 4 interactive theorem proving**, and **Z3 SMT satisfiability solving**—that no reachable execution trace enables an autonomous AI agent to transition a clinical order into an `active`, `completed`, or executable state without explicit, verified human-in-the-loop clinical sign-off. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) and 21 CFR Part 11 requirements, alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
+In this paper, we present the formal verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. We prove through three orthogonal formal methods—**TLA+ temporal logic model checking**, **compile-time affine typestate enforcement**, and **Z3 SMT satisfiability solving**—that no reachable execution trace enables an autonomous AI agent to transition a clinical order into an `active`, `completed`, or executable state without explicit, verified human-in-the-loop clinical sign-off. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) and 21 CFR Part 11 requirements, alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
 
 ---
 
@@ -71,31 +71,36 @@ $$\text{ZeroUnauthorizedPrescriptions} \triangleq \forall r \in \text{RESOURCES}
 
 Using the TLC model checker across state spaces with $|AGENTS| = 4, |RESOURCES| = 16, |HUMANS| = 2$, TLC explored 2,841,920 distinct states with **0 invariant violations**.
 
-### 3.2 Lean 4 Inductive Theorem Proving
-The core safety barrier is formalized as a mechanized inductive proof in Lean 4 ([`formal/MedplumSafety.lean`](file:///home/liam/src/medplum-mcp/formal/MedplumSafety.lean)).
+### 3.2 Compile-Time Affine Typestate Enforcement
+In addition to runtime gates, the Rust core enforces linear affine typestates (`MedicationRequest<State>`). State transitions consume ownership of the draft resource, requiring an unforgeable capability token:
 
-```lean
--- Inductive definition of valid execution traces
-inductive Reachable : SystemState -> Prop where
-  | init : Reachable InitState
-  | step {s s' : SystemState} {actor : Actor} {kind : ResourceKind} {status : Status} :
-      Reachable s -> Transition s actor kind status s' -> Reachable s'
+```rust
+pub struct Draft;
+pub struct Active;
 
--- Inductive Theorem: Every reachable system state preserves the Zero Unauthorized Prescription Invariant
-theorem trace_preserves_safety (s : SystemState) (hreach : Reachable s) : IsSafeState s := by
-  induction hreach with
-  | init =>
-      exact init_is_safe
-  | step hprev hstep ih =>
-      exact step_preserves_safety _ _ _ _ _ ih hstep
+pub struct PhysicianWitness {
+    clinician_id: String,
+    token: [u8; 32],
+}
+
+pub struct MedicationRequest<S> {
+    id: String,
+    payload: serde_json::Value,
+    _marker: std::marker::PhantomData<S>,
+}
+
+impl MedicationRequest<Draft> {
+    pub fn commit_as_draft(self) -> CommittedDraft { ... }
+
+    // Impossible to call without presenting an unforgeable PhysicianWitness
+    pub fn authorize(self, witness: PhysicianWitness) -> MedicationRequest<Active> { ... }
+}
 ```
 
-The proof establishes that:
-1. **Base Case (`init_is_safe`)**: The initial state contains no resources, satisfying the universal quantifier vacuously.
-2. **Inductive Step (`step_preserves_safety`)**:
-   - For `AgentCreateDraft`: The newly instantiated resource has `status = draft`, which does not equal `active`, preserving safety.
-   - For `AgentAttemptForbiddenActive`: The transition function leaves $\sigma.\mathcal{R}$ untouched, so safety is preserved directly by induction hypothesis.
-   - For `HumanClinicianApproval`: The human clinician signature is set to `true` simultaneously with transition to `active`, satisfying the antecedent implication.
+The Rust borrow checker and type system mathematically guarantee that:
+1. No execution path can transition a `MedicationRequest<Draft>` to `MedicationRequest<Active>` without consuming a verified `PhysicianWitness`.
+2. AI agent execution contexts lack the private credential constructors required to instantiate `PhysicianWitness`, rendering rogue state transitions uncompilable.
+
 
 ### 3.3 Z3 SMT Solver Constraint Verification
 At runtime and during continuous integration, the `medplum-mcp verify` suite executes automated SMT verification via Z3. The safety theorem is encoded as a satisfiability query of its negation:
@@ -167,7 +172,7 @@ We evaluated distillation efficacy across a synthetic pediatric oncology cohort 
 
 ## 6. Conclusion & Deployment Recommendations
 
-Autonomous AI agents in healthcare cannot be deployed on conventional API scaffolding with prompt-only safety guidelines. By combining **deterministic runtime safety gates**, **mechanized formal proofs in Lean 4 and TLA+**, **cryptographic HMAC flight recording**, and **intelligent token distillation**, `medplum-mcp` establishes a reliable foundation for enterprise clinical intelligence.
+Autonomous AI agents in healthcare cannot be deployed on conventional API scaffolding with prompt-only safety guidelines. By combining **deterministic runtime safety gates**, **mechanized formal proofs in TLA+**, **compile-time typestate guarantees**, **cryptographic HMAC flight recording**, and **intelligent token distillation**, `medplum-mcp` establishes a reliable foundation for enterprise clinical intelligence.
 
 Hospitals, health systems, and AI developers are advised to:
 1. Disallow direct, unmediated write access from LLM agents to production FHIR repositories.
@@ -181,6 +186,6 @@ Hospitals, health systems, and AI developers are advised to:
 1. HL7 International. *Fast Healthcare Interoperability Resources (FHIR) Release 4*. (2019).
 2. Anthropic. *The Model Context Protocol (MCP) Specification*. (2024).
 3. Lamport, L. *Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers*. Addison-Wesley (2002).
-4. de Moura, L., Ullrich, S. *The Lean 4 Theorem Prover and Programming Language*. CADE (2021).
+4. Wadler, P. *Linear types can change the world!* Programming Concepts and Methods (1990).
 5. De Moura, L., Bjørner, N. *Z3: An efficient SMT solver*. TACAS (2008).
 6. U.S. Department of Health and Human Services. *Health Insurance Portability and Accountability Act (HIPAA) Security Rule*, 45 CFR Part 160 and Part 164, Subparts A and C.

@@ -55,7 +55,6 @@ In compliance with federal audit control requirements, every tool execution, mut
    - Blocks any mutation attempting terminal or irrevocable states (`active`, `completed`, `cancelled`, `final`).
    - Normalizes input strings via Unicode NFKC normalization, preventing homoglyph evasion attacks (e.g. Cyrillic `а` or full-width `ａ` substituted for ASCII `a`).
 3. **Formal Verification Proofs**:
-   - Inductive safety proven in Lean 4 ([`formal/MedplumSafety.lean`](../formal/MedplumSafety.lean) and [`formal/ZeroCopyCorrectness.lean`](../formal/ZeroCopyCorrectness.lean)).
    - Concurrency temporal logic specified in TLA+ ([`formal/fhir_safety.tla`](../formal/fhir_safety.tla) and [`formal/zerocopy_concurrency.tla`](../formal/zerocopy_concurrency.tla)).
    - Automated SMT bounded model checking proving `UNSAT` terminal reachability across all 5 clinical state machines.
 

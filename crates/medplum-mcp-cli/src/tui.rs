@@ -4,7 +4,7 @@
 //! 1. 3-Tier FHIR Token Distillation economics (% reduction, tokens saved, $ cost saved)
 //! 2. Kernel Zero-Copy & Performance metrics (ops/sec, latency, DMA queue depth)
 //! 3. HIPAA 45 CFR § 164.312 Cryptographic Flight Recorder (scrolling HMAC hash chain table)
-//! 4. Formal Verification & FSM state reachability status (Lean 4 / Z3 UNSAT)
+//! 4. Formal Verification & FSM state reachability status (TLA+ / Z3 UNSAT)
 
 use crate::cli::TuiArgs;
 use crossterm::{
@@ -321,7 +321,7 @@ impl TuiApp {
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(" (Lean 4 + Z3 UNSAT)"),
+                Span::raw(" (TLA+ / Z3 UNSAT)"),
             ]),
             Line::from(vec![
                 Span::raw("Affine Typestate FSM Enforcement:    "),
