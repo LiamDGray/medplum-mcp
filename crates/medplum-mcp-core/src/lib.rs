@@ -16,8 +16,9 @@ pub mod zerocopy_audit;
 
 // Re-exports for convenient downstream access
 pub use audit::{
-    compute_entry_signature, compute_payload_digest, verify_audit_log, ActionStatus, AuditEntry,
-    AuditError, AuditLogManager, AuditVerificationReport, GENESIS_PREV_SIGNATURE,
+    compute_entry_signature, compute_payload_digest, verify_audit_log, verify_binary_audit_log,
+    ActionStatus, AuditEntry, AuditError, AuditLogManager, AuditVerificationReport,
+    GENESIS_PREV_SIGNATURE,
 };
 pub use benchmarks::{run_fhir_benchmarks, AggregateBenchmarkReport, BenchmarkResult};
 pub use rkyv_clinical::{
@@ -30,7 +31,7 @@ pub use safety::{
 };
 pub use secret::SecretString;
 pub use simd_diet::{distill_resource_simd, SimdDistilledResource};
-pub use token_diet::{distill_resource, DetailLevel, TokenDietError};
+pub use token_diet::{distill_raw_slice, distill_resource, DetailLevel, TokenDietError};
 pub use typestate::{
     Active, Cancelled, ClinicalState, Completed, Draft, MedicationRequest, PhysicianWitness,
 };

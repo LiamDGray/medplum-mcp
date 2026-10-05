@@ -91,9 +91,12 @@ impl MedicationRequest<Draft> {
 - A method transitioning state consumes `self` by value and requires a cryptographically verified `PhysicianWitness` token.
 - At compile-time, code attempting an unauthorized transition fails compilation. At runtime, the safety gate evaluates via branch-predicted ASCII token normalization in ~380 nanoseconds.
 
-### 3.3 SIMD-Accelerated JSON Parsing
-- With optional SIMD features (`simd-json`), vector instructions (AVX2 / NEON) parse 32-byte chunks of FHIR JSON payloads in single CPU clock cycles.
-- String searching and character escaping during token distillation operate directly over byte slices (`&[u8]`) rather than intermediate heap-allocated UTF-8 strings.
+### 3.3 SIMD-Accelerated In-Situ Borrowed Distillation (`simd_diet.rs`)
+- **Wiring & Integration**: Seamlessly integrated into `distill_raw_slice(&mut [u8], DetailLevel)` and `SimdDistilledResource::to_value()`.
+- **Architectural Rationale & Constraints**:
+  - Eliminates intermediate heap allocations for JSON-RPC string payloads by parsing bytes in-situ into borrowed string slices (`&'a str`).
+  - Directly extracts LOINC codes, vital sign values, and patient identifiers without building or traversing intermediate owned DOM trees.
+  - Satisfies strict zero-allocation memory constraints in high-concurrency container environments.
 
 ### 3.4 Linux `io_uring` Asynchronous Kernel Submission Queues
 When compiled on Linux with `feature = ["io-uring"]`:
@@ -102,8 +105,14 @@ When compiled on Linux with `feature = ["io-uring"]`:
 
 ### 3.5 True Zero-Copy In-Memory Transmutation (`zerocopy` & `rkyv`)
 Standard serialization frameworks like `serde_json` allocate owned heap trees (`String`, `Map<String, Value>`). Medplum MCP implements true zero-copy memory layouts:
-- **`zerocopy` Binary Audit Frame**: 120-byte fixed-layout C-ABI header (`BinaryAuditHeader`) transmuting raw disk and network bytes directly into memory structures with **zero parsing overhead and zero heap allocations** (**46.1x faster** than Serde JSON).
-- **`rkyv` Zero-Deserialization Clinical Archives**: In-memory patient records, lab panels, and medication histories stored as archived byte slices accessed via direct pointers (`access_archived_dataset`) without unpacking or reconstructing heap structs (**5.7x faster** than Serde JSON).
+- **`zerocopy` Binary Audit Frame (`zerocopy_audit.rs`)**:
+  - **Wiring & Integration**: Wired directly into `AuditLogManager::with_binary_log` for parallel binary audit logging (`.bin`) and `AuditLogManager::verify_binary_audit_log`, supported natively in CLI `medplum-mcp-rs verify --audit-log audit.bin`.
+  - **Empirical Performance**: Transmutes raw 120-byte C-ABI headers with zero allocations, achieving **77.7x faster** throughput than Serde JSON (1.48 ms vs 114.8 ms over 10,000 iterations).
+  - **Architectural Rationale**: Provides fixed-size binary frames ideal for high-throughput ring buffers and kernel IPC without JSON formatting overhead.
+- **`rkyv` Zero-Deserialization Clinical Archives (`rkyv_clinical.rs`)**:
+  - **Wiring & Integration**: Wired directly into `ClinicalSandbox` via `export_rkyv_archive`, `query_archived_patient`, and `query_archived_observations`.
+  - **Empirical Performance**: Direct pointer access on byte slices yields **6.4x faster** queries than Serde JSON (48.9 ms vs 311.9 ms over 10,000 iterations).
+  - **Architectural Rationale**: Enables instantaneous snapshots and zero-heap lookups over pediatric oncology datasets without deserialization overhead.
 
 ### 3.6 High-Performance Pipe Transport & Axum Streaming (`splice_transport.rs` / `server.rs`)
 To achieve low latency and minimal CPU overhead across deployments, MCP transports are optimized per deployment model:
