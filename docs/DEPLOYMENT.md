@@ -73,19 +73,15 @@ medplum-mcp-rs serve \
 ---
 
 ## 3. High-Performance Linux Kernel Tuning
+ 
+To achieve maximum throughput and low latency in production pipe and socket operations:
 
-To achieve maximum throughput (>600,000 req/sec) and zero-copy page transfer in production:
-
-1. **Kernel TLS (kTLS)**: Ensure the `tls` kernel module is loaded:
-   ```bash
-   sudo modprobe tls
-   ```
-2. **Socket Buffer Sizing**:
+1. **Socket Buffer Sizing**:
    ```bash
    sudo sysctl -w net.core.rmem_max=16777216
    sudo sysctl -w net.core.wmem_max=16777216
    ```
-3. **Pipe Buffer Limits**:
+2. **Pipe Buffer Limits**:
    ```bash
    sudo sysctl -w fs.pipe-max-size=1048576
    ```

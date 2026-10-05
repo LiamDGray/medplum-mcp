@@ -221,15 +221,15 @@ let active = draft.issue_with_physician_witness(witness);
 
 ---
 
-## 8. Kernel Zero-Copy Network Engine
+## 8. High-Performance Pipe Transport & Axum Streaming
 
-The network engine (`crates/medplum-mcp-server/src/network_zero_copy.rs`) eliminates user-space CPU cache thrashing through a hybrid kernel-routing architecture:
+The transport architecture combines zero-copy Linux pipe IPC with production-grade asynchronous networking:
 
-| Payload Type | Data Origin | Zero-Copy Mechanism | Encryption Strategy |
+| Transport Layer | Channel | Mechanism | Target Use Case |
 |:---|:---|:---|:---|
-| **Static Assets / Bundles** | Kernel Page Cache / Disk | `sendfile(2)` / `splice(2)` | **Kernel TLS (kTLS)** (`TCP_ULP = "tls"`) hardware NIC offload |
-| **Dynamic Data ($\ge 10$ KB)** | User-Space Buffer | `MSG_ZEROCOPY` page pinning | Direct scatter-gather DMA with `MSG_ERRQUEUE` completion |
-| **Dynamic Data ($< 10$ KB)** | User-Space Buffer | Traditional `send()` byte-copy | Avoids page-pinning CPU overhead |
+| **Local Stdio IPC** | Anonymous Linux Pipes | `vmsplice(2)` / `splice(2)` | High-throughput zero-copy pipe streaming for local LLMs (Claude Desktop, Cursor) |
+| **Network SSE / HTTP** | TCP Sockets | Axum + `tokio` + `rustls` | Asynchronous Server-Sent Events (SSE) and HTTP streaming for remote agent gateways |
+| **In-Memory Zero-Copy** | Memory Buffers | `simd-json` & `zerocopy` | Borrowed string slices and fixed-layout binary audit headers without heap allocations |
 
 ---
 
@@ -267,7 +267,7 @@ The Rust engine was subjected to a continuous soak test across 16 OS threads:
 The `medplum-mcp-rs tui` command launches an interactive terminal dashboard rendering:
 - Real-time token reduction gauges (-92.4% Compact, -84.8% Standard, -88.1% Executive).
 - Live throughput and microsecond latency gauges.
-- Kernel zero-copy mechanism status (`sendfile`, `vmsplice`, `MSG_ZEROCOPY`, `kTLS`).
+- Transport status (`vmsplice`, `splice`, Axum SSE).
 - Scrolling HIPAA 45 CFR § 164.312 cryptographic flight recorder with status badges.
 - Formal verification status panel.
 

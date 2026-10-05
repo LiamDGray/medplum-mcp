@@ -10,8 +10,6 @@
 //! 5. HTTP Mock Server connection flood handling 50 concurrent HTTP requests.
 
 use std::collections::HashSet;
-use std::net::{TcpListener, TcpStream};
-use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::task::JoinSet;
@@ -20,7 +18,6 @@ use medplum_mcp_core::audit::{ActionStatus, AuditLogManager};
 use medplum_mcp_server::client::MedplumClient;
 use medplum_mcp_server::mcp::McpServer;
 use medplum_mcp_server::mock_server::start_mock_server;
-use medplum_mcp_server::network_zero_copy::send_clinical_payload;
 use medplum_mcp_server::sandbox::ClinicalSandbox;
 use serde_json::{json, Value};
 
@@ -290,50 +287,4 @@ async fn test_concurrent_mock_server_connection_flood() {
     }
 
     handle.shutdown();
-}
-
-#[test]
-fn test_concurrent_network_zerocopy_socket_transfers() {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-
-    const NUM_SOCKET_THREADS: usize = 10;
-    const PAYLOAD_SIZE: usize = 20 * 1024; // 20 KB (triggers zero-copy path)
-
-    let mut payload = Vec::with_capacity(PAYLOAD_SIZE);
-    while payload.len() < PAYLOAD_SIZE {
-        payload.extend_from_slice(b"{\"resourceType\":\"Observation\",\"value\":98.6},");
-    }
-    let shared_payload = Arc::new(payload);
-
-    let expected_len = shared_payload.len();
-
-    let server_handle = std::thread::spawn(move || {
-        for _ in 0..NUM_SOCKET_THREADS {
-            let (stream, _) = listener.accept().unwrap();
-            let raw_fd = stream.as_raw_fd();
-            let p = Arc::clone(&shared_payload);
-            std::thread::spawn(move || {
-                let sent = send_clinical_payload(raw_fd, &p).unwrap();
-                assert_eq!(sent, p.len());
-                drop(stream);
-            });
-        }
-    });
-
-    let mut client_handles = Vec::with_capacity(NUM_SOCKET_THREADS);
-    for _ in 0..NUM_SOCKET_THREADS {
-        let handle = std::thread::spawn(move || {
-            let mut client = TcpStream::connect(format!("127.0.0.1:{}", port)).unwrap();
-            let mut buf = Vec::new();
-            std::io::Read::read_to_end(&mut client, &mut buf).unwrap();
-            assert_eq!(buf.len(), expected_len);
-        });
-        client_handles.push(handle);
-    }
-
-    for h in client_handles {
-        h.join().unwrap();
-    }
-    server_handle.join().unwrap();
 }

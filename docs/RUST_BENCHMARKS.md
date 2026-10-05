@@ -105,17 +105,17 @@ Standard serialization frameworks like `serde_json` allocate owned heap trees (`
 - **`zerocopy` Binary Audit Frame**: 120-byte fixed-layout C-ABI header (`BinaryAuditHeader`) transmuting raw disk and network bytes directly into memory structures with **zero parsing overhead and zero heap allocations** (**46.1x faster** than Serde JSON).
 - **`rkyv` Zero-Deserialization Clinical Archives**: In-memory patient records, lab panels, and medication histories stored as archived byte slices accessed via direct pointers (`access_archived_dataset`) without unpacking or reconstructing heap structs (**5.7x faster** than Serde JSON).
 
-### 3.6 The Kernel Zero-Copy Network Engine (`network_zero_copy.rs`)
-To achieve true zero-copy for web server and MCP HTTP/SSE transports, data transfers are split by data origin and payload volume:
+### 3.6 High-Performance Pipe Transport & Axum Streaming (`splice_transport.rs` / `server.rs`)
+To achieve low latency and minimal CPU overhead across deployments, MCP transports are optimized per deployment model:
 
-| Payload Type | Data Origin | Zero-Copy Mechanism | HTTPS / Cryptography Strategy |
+| Transport Layer | Channel | Mechanism | Target Environment |
 | :--- | :--- | :--- | :--- |
-| **Static Assets** (Demo console, OpenAPI specs, docs) | Disk / Page Cache | `sendfile(2)` / `splice(2)` | **Kernel TLS (kTLS)** transparent hardware NIC offload |
-| **Large Dynamic Data** (>10 KB FHIR Bundles, searchsets) | User Memory | `MSG_ZEROCOPY` / `io_uring SEND_ZC` | User-space TLS or kTLS with socket error queue draining |
-| **Small Dynamic Data** (<10 KB single resources, pings) | User Memory | Traditional `send()` | Traditional send (avoids page-pinning CPU overhead) |
+| **Local Stdio IPC** | Anonymous Linux Pipes | `splice(2)` / `vmsplice(2)` | Claude Desktop, Cursor, local agent CLI |
+| **Network SSE / HTTP** | TCP Sockets | Axum asynchronous streaming | Cloud / containerized multi-agent deployments |
+| **Zero-Copy Serialization** | Binary Slices | `zerocopy::FromBytes` / `rkyv` | Local high-speed audit ledger and cached archives |
 
-- **Adaptive 10 KB Threshold**: Eliminates page-pinning overhead for small responses while passing user pages directly to NIC scatter-gather DMA engines for large payloads.
-- **Rust Ownership Contract**: Awaits `MSG_ERRQUEUE` completion notifications (`SO_EE_ORIGIN_ZEROCOPY`) ensuring buffers are never dropped or reallocated while pinned by the kernel.
+- **Pipe Splicing**: Bypasses user-space intermediary copying when streaming JSON-RPC frames over standard I/O pipes.
+- **Asynchronous Axum Gateway**: Scalable SSE and POST endpoints powered by `tokio` and `rustls`.
 
 ---
 
@@ -136,7 +136,7 @@ The Rust implementation has been comprehensively tested, fuzzed, and formally ve
    - Formal capability token proof that `PhysicianWitness` cannot be forged.
 4. **HTTP Mock Server & Resilient Client Edge-Cases (16 tests)**:
    - Validating HTTP 400 Bad Request on syntax errors, 404 on missing routes, 422 Unprocessable Entity on forbidden states, 429 rate limit headers, and exponential backoff retry on 503.
-5. **Network Zero-Copy & Splice Transport (7 tests)**: Real TCP socket loopback transfers verifying `sendfile(2)`, `MSG_ZEROCOPY`, and `splice(2)` pipe transfers.
+5. **Linux Pipe Splice Transport**: Real pipe transfers verifying zero-copy `vmsplice(2)` and `splice(2)` IPC communication.
 
 ---
 

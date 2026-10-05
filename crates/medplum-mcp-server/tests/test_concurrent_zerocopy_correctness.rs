@@ -10,13 +10,8 @@ use medplum_mcp_core::rkyv_clinical::{
     access_archived_dataset, archive_clinical_dataset, ClinicalDataset, PatientRecord,
 };
 use medplum_mcp_core::zerocopy_audit::{verify_binary_header, BinaryAuditHeader};
-use medplum_mcp_server::network_zero_copy::{
-    determine_zerocopy_strategy, send_clinical_payload, ZeroCopyStrategy,
-};
 use medplum_mcp_server::splice_transport::{SplicePipe, SpliceTransport};
 use std::io::Read;
-use std::os::unix::io::AsRawFd;
-use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -113,58 +108,6 @@ fn test_concurrent_rkyv_zero_deserialization_readers() {
                 assert!(pat.id.as_str().starts_with("pat-concurrent-"));
                 assert!(pat.name.as_str().starts_with("Pediatric Patient "));
             }
-        });
-        handles.push(handle);
-    }
-
-    for h in handles {
-        h.join().unwrap();
-    }
-}
-
-#[test]
-fn test_concurrent_socket_send_clinical_payload() {
-    let num_threads = 16;
-    let mut handles = Vec::new();
-
-    for thread_idx in 0..num_threads {
-        let handle = thread::spawn(move || {
-            let (mut rx, tx) = UnixStream::pair().expect("UnixStream pair created");
-            let tx_fd = tx.as_raw_fd();
-
-            // Alternate between small payload (<10KB) and large payload (>=10KB)
-            let is_large = thread_idx % 2 == 0;
-            let payload_size = if is_large { 24 * 1024 } else { 4 * 1024 };
-            let test_data: Vec<u8> = (0..payload_size).map(|b| (b % 251) as u8).collect();
-
-            // Spawn receiver thread
-            let expected_data = test_data.clone();
-            let reader_handle = thread::spawn(move || {
-                let mut received = Vec::with_capacity(payload_size);
-                let mut buf = [0u8; 4096];
-                while received.len() < payload_size {
-                    let n = rx.read(&mut buf).expect("Read from socket");
-                    if n == 0 {
-                        break;
-                    }
-                    received.extend_from_slice(&buf[..n]);
-                }
-                assert_eq!(received.len(), expected_data.len());
-                assert_eq!(received, expected_data);
-            });
-
-            // Send via adaptive zero-copy router
-            let strategy = determine_zerocopy_strategy(false, test_data.len());
-            if is_large {
-                assert_eq!(strategy, ZeroCopyStrategy::MsgZeroCopy);
-            } else {
-                assert_eq!(strategy, ZeroCopyStrategy::TraditionalSend);
-            }
-
-            let sent = send_clinical_payload(tx_fd, &test_data).expect("Send payload");
-            assert_eq!(sent, test_data.len());
-
-            reader_handle.join().unwrap();
         });
         handles.push(handle);
     }

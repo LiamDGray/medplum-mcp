@@ -19,8 +19,8 @@
    Autonomous AI agents are mathematically prohibited from issuing active prescriptions or changing clinical states to executing statuses (`active`, `completed`, `cancelled`). All mutations are restricted to `draft` states and enforced by compile-time affine typestates (`MedicationRequest<Draft>`) and runtime non-bypassable safety gates.
 2. **Three-Tier FHIR Token Distillation Engine**:
    Distills voluminous HL7 FHIR payloads into `compact` (15 KB, ~94.7% reduction), `standard` (31 KB, ~89.1% reduction), and `executive` (23 KB, ~91.9% reduction) schemas while preserving 100% of clinical coding semantics (LOINC, SNOMED-CT, RxNorm). Delivers **609,655 ops/sec** at **1.64 µs** latency.
-3. **Kernel Zero-Copy Network Engine**:
-   Streams static bundles via `sendfile(2)` and `splice(2)` with **Kernel TLS (kTLS)** hardware NIC offload; routes dynamic payloads $\ge 10$ KB via `MSG_ZEROCOPY` page pinning with scatter-gather DMA.
+3. **Zero-Copy Pipe Transport & Axum HTTP Streaming**:
+   High-throughput streaming over Linux pipes (`splice(2)` / `vmsplice(2)`) for stdio IPC with Claude Desktop/Cursor without user-space buffer copies, combined with production Axum SSE/HTTP transport with native `rustls`.
 4. **Cryptographic HMAC-SHA256 Flight Recorder**:
    Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements.
 5. **Deterministic Safety Verification & Typestates**:

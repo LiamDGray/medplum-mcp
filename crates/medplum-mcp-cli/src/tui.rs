@@ -278,12 +278,11 @@ impl TuiApp {
                 ),
             ]),
             Line::from(vec![
-                Span::raw("Kernel Mech: "),
-                Span::styled("sendfile(2) ", Style::default().fg(Color::Yellow)),
+                Span::raw("Transport:   "),
                 Span::styled("vmsplice(2) ", Style::default().fg(Color::Yellow)),
-                Span::styled("MSG_ZEROCOPY ", Style::default().fg(Color::Yellow)),
+                Span::styled("splice(2) ", Style::default().fg(Color::Yellow)),
                 Span::styled(
-                    "kTLS",
+                    "Axum SSE / Pipe",
                     Style::default()
                         .fg(Color::Green)
                         .add_modifier(Modifier::BOLD),
@@ -306,7 +305,7 @@ impl TuiApp {
             ]),
         ];
         let kernel_block = Block::default()
-            .title(" Kernel Zero-Copy Engine ")
+            .title(" High-Performance Transport ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan));
         frame.render_widget(Paragraph::new(kernel_text).block(kernel_block), rows[1]);
