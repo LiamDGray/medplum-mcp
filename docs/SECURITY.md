@@ -54,9 +54,9 @@ In compliance with federal audit control requirements, every tool execution, mut
 2. **Dynamic Runtime Safety Gate (`assert_write_permitted`)**:
    - Blocks any mutation attempting terminal or irrevocable states (`active`, `completed`, `cancelled`, `final`).
    - Normalizes input strings via Unicode NFKC normalization, preventing homoglyph evasion attacks (e.g. Cyrillic `а` or full-width `ａ` substituted for ASCII `a`).
-3. **Formal Verification Proofs**:
-   - Concurrency temporal logic specified in TLA+ ([`formal/fhir_safety.tla`](../formal/fhir_safety.tla) and [`formal/zerocopy_concurrency.tla`](../formal/zerocopy_concurrency.tla)).
-   - Automated SMT bounded model checking proving `UNSAT` terminal reachability across all 5 clinical state machines.
+3. **Deterministic FSM Invariant Verification**:
+   - Automated reachability analysis proving that forbidden terminal states are unreachable during agent execution.
+   - Comprehensive test assertions evaluating all state transitions across all 5 clinical entities.
 
 ---
 

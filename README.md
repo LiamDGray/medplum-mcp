@@ -6,7 +6,7 @@
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue?style=flat-square)](LICENSE)
 [![MCP Spec](https://img.shields.io/badge/MCP-2.3.0%20(FastMCP)-06b6d4?style=flat-square)](https://modelcontextprotocol.io)
 [![Standard](https://img.shields.io/badge/HAMCP-Tier--4%20Clinical%20Safety-purple?style=flat-square)](docs/ARCHITECTURE.md)
-[![Formal Verification](https://img.shields.io/badge/Formal%20Verification-TLA%2B%20%7C%20Z3%20SMT-success?style=flat-square)](formal/)
+[![Deterministic Safety](https://img.shields.io/badge/Safety%20Barrier-Zero%20Unauthorized%20Mutations-success?style=flat-square)](docs/ARCHITECTURE.md)
 [![Soak Tested](https://img.shields.io/badge/Soak%20Test-723M%20ops%20%7C%200%20viols-brightgreen?style=flat-square)](docs/ARCHITECTURE.md#10-empirical-90-minute-soak-telemetry)
 
 > **medplum-mcp** provides a hardened, deterministic Model Context Protocol (MCP) server connecting frontier AI agents to HL7 FHIR R4 Electronic Health Record (EHR) repositories. Designed for hospital systems, clinical AI researchers, and healthtech engineering teams requiring strict safety boundaries, HIPAA audit compliance, and token optimization. Built natively in dual-stack **Python & Zero-Copy Rust**.
@@ -23,8 +23,8 @@
    Streams static bundles via `sendfile(2)` and `splice(2)` with **Kernel TLS (kTLS)** hardware NIC offload; routes dynamic payloads $\ge 10$ KB via `MSG_ZEROCOPY` page pinning with scatter-gather DMA.
 4. **Cryptographic HMAC-SHA256 Flight Recorder**:
    Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements.
-5. **Formal Safety Verification & Typestates**:
-   The safety barrier is verified via temporal logic model checking in **TLA+**, compile-time affine typestates in Rust, and automated bounded constraint verification via **Microsoft Z3 SMT**.
+5. **Deterministic Safety Verification & Typestates**:
+   The safety barrier enforces non-bypassable runtime status filtering and compile-time affine typestates in Rust (`MedicationRequest<Draft>`), guaranteeing that autonomous agents cannot transition clinical orders into executable states without human clinician witness.
 6. **Empirically Certified Soak Stability**:
    Battle-tested across **723,532,992+ operations** continuous soak testing with **0 invariant violations** and rock-solid **11.4 MB RSS**.
 7. **Live 60 FPS Ratatui Terminal UI Dashboard**:
@@ -116,7 +116,7 @@ medplum-mcp-rs soak --duration-secs 5400 --workers 16
 # Run empirical microsecond performance benchmarks
 medplum-mcp-rs bench
 
-# Cryptographically verify HIPAA HMAC audit ledger & TLA+ / Z3 formal invariants
+# Cryptographically verify HIPAA HMAC audit ledger & safety invariants
 medplum-mcp-rs verify --strict
 ```
 
@@ -202,22 +202,20 @@ medplum-mcp audit verify --log-file audit.jsonl
 # 3. Inspect recent audit entries
 medplum-mcp audit inspect --limit 20
 
-# 4. Run mathematical safety verification suite (Z3 SMT + Audit Check)
+# 4. Run safety verification suite (Deterministic Invariants + Audit Check)
 medplum-mcp verify --strict --output-format terminal
 ```
 
 ---
 
-## Documentation & Formal Specifications
+## Documentation & Technical Specifications
 
 - [System Architecture Specification (`docs/ARCHITECTURE.md`)](docs/ARCHITECTURE.md): Complete architecture covering the 5 HAMCP invariant pillars, token distillation schemas, kernel zero-copy engine, and 90-minute soak telemetry.
 - [Enterprise Commercial Licensing & Entitlements (`docs/COMMERCIAL.md`)](docs/COMMERCIAL.md): Dual-licensing model (BSL 1.1), commercial patient volume tiers, and enterprise-grade guarantees.
 - [Security Architecture & Audit Controls (`docs/SECURITY.md`)](docs/SECURITY.md): HIPAA 45 CFR § 164.312 compliance, zero-leak credential enclaves, and vulnerability disclosure.
 - [Deployment & Operations Guide (`docs/DEPLOYMENT.md`)](docs/DEPLOYMENT.md): Stdio desktop configuration, cloud-native SSE deployment, and Linux kernel tuning.
 - [Empirical Performance Benchmarks (`docs/RUST_BENCHMARKS.md`)](docs/RUST_BENCHMARKS.md): Microsecond benchmarks comparing Python reference vs Zero-Copy Rust.
-- [Technical Whitepaper & Verification Report (`docs/whitepaper.md`)](docs/whitepaper.md): Mathematical proofs and clinical hazard analysis proving zero unauthorized prescriptions.
-- [TLA+ Safety Specification (`formal/fhir_safety.tla`)](formal/fhir_safety.tla): Formal temporal logic specification of the clinical safety barrier.
-- [TLA+ Concurrency Specification (`formal/zerocopy_concurrency.tla`)](formal/zerocopy_concurrency.tla): Temporal logic specification of multi-worker asynchronous kernel zero-copy DMA.
+- [Technical Whitepaper & Safety Report (`docs/whitepaper.md`)](docs/whitepaper.md): Deterministic safety invariants, typestates, and clinical hazard analysis.
 - [Interactive HTML Demo Console (`docs/demo/index.html`)](docs/demo/index.html): Standalone, zero-CDN interactive demonstration application.
 
 ---

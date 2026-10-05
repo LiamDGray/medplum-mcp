@@ -749,14 +749,14 @@ impl McpServer {
 
         if uri == "fhir://verification/status" {
             let data = json!({
-                "overall_status": "PROVEN",
-                "verification_engine": "Microsoft Z3 SMT Solver",
-                "theorem": "Zero Unauthorized Commitment Invariant (Empty Reachable Bad States)",
+                "overall_status": "ENFORCED",
+                "safety_interceptor": "Unicode NFKC Normalization & Deterministic State Gate",
+                "invariant": "Zero Unauthorized Commitment Invariant (Draft mutations only)",
                 "entities": {
-                    "Observation": { "entity_type": "Observation", "status": "unsat", "is_mcp": true, "max_depth": 3 },
-                    "MedicationRequest": { "entity_type": "MedicationRequest", "status": "unsat", "is_mcp": true, "max_depth": 3 },
-                    "Encounter": { "entity_type": "Encounter", "status": "unsat", "is_mcp": true, "max_depth": 3 },
-                    "CarePlan": { "entity_type": "CarePlan", "status": "unsat", "is_mcp": true, "max_depth": 3 }
+                    "Observation": { "entity_type": "Observation", "allowed_statuses": ["registered", "preliminary"], "blocked_statuses": ["final", "amended", "corrected"], "enforced": true },
+                    "MedicationRequest": { "entity_type": "MedicationRequest", "allowed_statuses": ["draft"], "blocked_statuses": ["active", "completed", "cancelled"], "enforced": true },
+                    "Encounter": { "entity_type": "Encounter", "allowed_statuses": ["planned", "arrived", "triaged", "in-progress"], "blocked_statuses": ["finished", "cancelled"], "enforced": true },
+                    "CarePlan": { "entity_type": "CarePlan", "allowed_statuses": ["draft"], "blocked_statuses": ["active", "completed", "revoked"], "enforced": true }
                 }
             });
             return Ok(data);
@@ -1119,8 +1119,8 @@ impl McpServer {
             }),
             json!({
                 "uri": "fhir://verification/status",
-                "name": "Formal Verification Status",
-                "description": "Formal verification proofs and SMT reachability status from Microsoft Z3.",
+                "name": "Deterministic Safety Status",
+                "description": "Deterministic safety interceptor configuration and invariant rules.",
                 "mimeType": "application/json"
             }),
         ]

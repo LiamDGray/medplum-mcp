@@ -10,7 +10,7 @@
 
 As Large Language Models (LLMs) and autonomous agents are granted tool-use capabilities to interact directly with Electronic Health Record (EHR) systems via protocols such as the Model Context Protocol (MCP), the blast radius of model hallucinations expands from misinformation to direct clinical harm. An unconstrained autonomous agent with write access to an HL7 FHIR datastore could issue or activate lethal medication orders, alter critical allergy records, or trigger unapproved chemotherapy infusions. 
 
-In this paper, we present the formal verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. We prove through three orthogonal formal methods—**TLA+ temporal logic model checking**, **compile-time affine typestate enforcement**, and **Z3 SMT satisfiability solving**—that no reachable execution trace enables an autonomous AI agent to transition a clinical order into an `active`, `completed`, or executable state without explicit, verified human-in-the-loop clinical sign-off. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) and 21 CFR Part 11 requirements, alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
+In this paper, we present the formal verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. We prove through **compile-time affine typestate enforcement**, **deterministic runtime state gates**, and **exhaustive FSM reachability analysis** that no reachable execution trace enables an autonomous AI agent to transition a clinical order into an `active`, `completed`, or executable state without explicit, verified human-in-the-loop clinical sign-off. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) and 21 CFR Part 11 requirements, alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
 
 ---
 
@@ -56,23 +56,12 @@ Notice that under an intercepted transition, $\sigma.\mathcal{R}$ is strictly in
 
 ---
 
-## 3. Tri-Partite Formal Verification
+## 3. Deterministic Safety Architecture
 
-To ensure zero implementation gaps between mathematical specification and runtime execution, `medplum-mcp` undergoes verification across three rigorous formal methods.
+To ensure zero implementation gaps between clinical policy and runtime execution, `medplum-mcp` enforces safety across three deterministic layers:
 
-### 3.1 TLA+ Model Checking
-The temporal logic specification in [`formal/fhir_safety.tla`](file:///home/liam/src/medplum-mcp/formal/fhir_safety.tla) models the non-deterministic interleaving of agent tool invocations and human clinician reviews.
-
-We define the temporal safety formula:
-$$\Phi_{\text{safety}} \equiv \Box \text{ZeroUnauthorizedPrescriptions}$$
-
-where:
-$$\text{ZeroUnauthorizedPrescriptions} \triangleq \forall r \in \text{RESOURCES} : (r.\text{type} = \text{"MedicationRequest"} \land r.\text{status} = \text{"active"}) \implies (r.\text{signed\_by\_human} = \text{TRUE})$$
-
-Using the TLC model checker across state spaces with $|AGENTS| = 4, |RESOURCES| = 16, |HUMANS| = 2$, TLC explored 2,841,920 distinct states with **0 invariant violations**.
-
-### 3.2 Compile-Time Affine Typestate Enforcement
-In addition to runtime gates, the Rust core enforces linear affine typestates (`MedicationRequest<State>`). State transitions consume ownership of the draft resource, requiring an unforgeable capability token:
+### 3.1 Compile-Time Affine Typestate Enforcement
+In the Rust core, clinical orders are represented via linear affine typestates (`MedicationRequest<State>`). State transitions consume ownership of the draft resource, requiring an unforgeable capability token:
 
 ```rust
 pub struct Draft;
@@ -101,13 +90,19 @@ The Rust borrow checker and type system mathematically guarantee that:
 1. No execution path can transition a `MedicationRequest<Draft>` to `MedicationRequest<Active>` without consuming a verified `PhysicianWitness`.
 2. AI agent execution contexts lack the private credential constructors required to instantiate `PhysicianWitness`, rendering rogue state transitions uncompilable.
 
+### 3.2 Deterministic Runtime Safety Interceptor & Homoglyph Defense
+At runtime, all agent mutations pass through `assert_write_permitted`:
+1. **Explicit Permission Gating**: Mutations are categorically rejected unless `--allow-writes` is explicitly configured.
+2. **Strict Status Filtering**: Inbound resources containing binding statuses (`active`, `completed`, `cancelled`, `final`, `amended`, `corrected`) trigger an immediate `SafetyInvariantViolation` (HTTP 403 / MCP tool error).
+3. **Unicode NFKC Normalization**: Status strings undergo Unicode NFKC normalization and invisible character stripping before lookup against forbidden status sets, defeating adversarial homoglyph injections (e.g. Cyrillic `а` or Greek `ο` substitutions).
 
-### 3.3 Z3 SMT Solver Constraint Verification
-At runtime and during continuous integration, the `medplum-mcp verify` suite executes automated SMT verification via Z3. The safety theorem is encoded as a satisfiability query of its negation:
+### 3.3 Exhaustive FSM Reachability Verification
+During continuous integration and local verification (`medplum-mcp verify`), the server performs automated graph reachability analysis across all 5 HL7 FHIR clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
 
-$$\exists a \in \mathcal{A}_{\text{agent}},\; \exists r \in \mathcal{R} : \text{Trans}(s, a, r, \text{active}) \land \neg r.\text{human\_signed}$$
+The reachability invariant:
+$$\text{Reachable}(\mathcal{S}_{\text{MCP}}) \cap \mathcal{S}_{\text{forbidden}} = \emptyset$$
 
-The Z3 SMT solver yields **`UNSAT`** across all permutations of agent roles, input parameters, and resource types, proving that no assignment of input variables can produce an unauthorized active prescription.
+is exhaustively evaluated. Across all reachable states under MCP tool invocation, the intersection with forbidden terminal statuses is provably empty.
 
 ---
 
@@ -172,7 +167,7 @@ We evaluated distillation efficacy across a synthetic pediatric oncology cohort 
 
 ## 6. Conclusion & Deployment Recommendations
 
-Autonomous AI agents in healthcare cannot be deployed on conventional API scaffolding with prompt-only safety guidelines. By combining **deterministic runtime safety gates**, **mechanized formal proofs in TLA+**, **compile-time typestate guarantees**, **cryptographic HMAC flight recording**, and **intelligent token distillation**, `medplum-mcp` establishes a reliable foundation for enterprise clinical intelligence.
+Autonomous AI agents in healthcare cannot be deployed on conventional API scaffolding with prompt-only safety guidelines. By combining **deterministic runtime safety gates**, **compile-time typestate guarantees**, **cryptographic HMAC flight recording**, and **intelligent token distillation**, `medplum-mcp` establishes a reliable foundation for enterprise clinical intelligence.
 
 Hospitals, health systems, and AI developers are advised to:
 1. Disallow direct, unmediated write access from LLM agents to production FHIR repositories.
@@ -185,7 +180,5 @@ Hospitals, health systems, and AI developers are advised to:
 
 1. HL7 International. *Fast Healthcare Interoperability Resources (FHIR) Release 4*. (2019).
 2. Anthropic. *The Model Context Protocol (MCP) Specification*. (2024).
-3. Lamport, L. *Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers*. Addison-Wesley (2002).
-4. Wadler, P. *Linear types can change the world!* Programming Concepts and Methods (1990).
-5. De Moura, L., Bjørner, N. *Z3: An efficient SMT solver*. TACAS (2008).
-6. U.S. Department of Health and Human Services. *Health Insurance Portability and Accountability Act (HIPAA) Security Rule*, 45 CFR Part 160 and Part 164, Subparts A and C.
+3. Wadler, P. *Linear types can change the world!* Programming Concepts and Methods (1990).
+4. U.S. Department of Health and Human Services. *Health Insurance Portability and Accountability Act (HIPAA) Security Rule*, 45 CFR Part 160 and Part 164, Subparts A and C.

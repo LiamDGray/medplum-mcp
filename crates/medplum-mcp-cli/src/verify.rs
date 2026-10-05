@@ -96,16 +96,16 @@ const CLINICAL_ENTITIES: &[&str] = &[
 ];
 
 /// Run all 3 verification stages:
-/// 1. Formal reachability theorems check (Z3 SMT unsat / Zero Unauthorized Commitment Invariant)
+/// 1. Deterministic FSM reachability check (Zero Unauthorized Commitment Invariant)
 /// 2. FSM typestate invariants check & Adversarial Homoglyph immunity
 /// 3. HMAC-SHA256 audit log integrity check
 pub fn run_verification(args: &VerifyArgs) -> Result<VerificationReport, VerifyError> {
     let start_time = Instant::now();
     let mut errors = Vec::new();
 
-    // Stage 1: Formal Reachability Theorems (Z3 SMT Model Checking reduction)
+    // Stage 1: Deterministic FSM Invariant Verification
     // In MCP mode, transitions to forbidden terminal states (active, completed, final, etc.)
-    // are strictly pruned by the dynamic safety gates and compile-time typestate invariants.
+    // are strictly prohibited by the deterministic runtime safety gate.
     // The bounded model checking reachability query:
     // Reachable(MCP) ∩ Forbidden = ∅
     // evaluates to UNSAT with 0 counterexamples across all depth bounds.
@@ -261,11 +261,11 @@ impl VerificationReport {
             "".to_string(),
             "---".to_string(),
             "".to_string(),
-            "## Stage 1: Z3 SMT Solver Model Checking".to_string(),
+            "## Stage 1: Deterministic FSM Invariant Verification".to_string(),
             "".to_string(),
-            "Mathematical proof using Microsoft Z3 SMT solver establishing the **Zero Unauthorized Commitment Invariant** across all reachable clinical state spaces.".to_string(),
+            "Verification of the **Zero Unauthorized Commitment Invariant** across all reachable clinical state spaces.".to_string(),
             "".to_string(),
-            "| Clinical Entity | Max Depth | SMT Solver Status | Invariant Verdict |".to_string(),
+            "| Clinical Entity | Max Depth | Status | Invariant Verdict |".to_string(),
             "| :--- | :--- | :--- | :--- |".to_string(),
         ];
 
@@ -359,13 +359,13 @@ impl VerificationReport {
 
         println!(
             "{}",
-            "Stage 1: Z3 SMT Solver Model Checking (Zero Terminal Reachability)"
+            "Stage 1: Deterministic FSM Invariant Verification (Zero Terminal Reachability)"
                 .magenta()
                 .bold()
         );
         println!(
             "{:<24} {:<12} {:<18} {:<20}",
-            "Clinical Entity", "Max Depth", "SMT Status", "Proof Verdict"
+            "Clinical Entity", "Max Depth", "Status", "Proof Verdict"
         );
         println!("{}", "─".repeat(78).dimmed());
 

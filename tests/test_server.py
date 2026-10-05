@@ -426,7 +426,7 @@ class TestNativeFHIRResources:
 
     @pytest.mark.anyio
     async def test_verification_status_resource(self, audit_manager: AuditLogManager) -> None:
-        """Verify fhir://verification/status returns Z3 SMT solver reachability status."""
+        """Verify fhir://verification/status returns deterministic safety status."""
         server = create_server(demo_mode=True, allow_writes=False, audit_manager=audit_manager)
 
         contents = await server.read_resource("fhir://verification/status")
@@ -436,10 +436,11 @@ class TestNativeFHIRResources:
         assert isinstance(raw_text, str)
         data = json.loads(raw_text)
 
-        assert data["overall_status"] == "PROVEN"
+        assert data["overall_status"] == "ENFORCED"
         assert "entities" in data
         for _entity_name, entity_proof in data["entities"].items():
-            assert entity_proof["status"] == "unsat"
+            assert entity_proof["enforced"] is True
+            assert "blocked_statuses" in entity_proof
 
 
 # ===========================================================================

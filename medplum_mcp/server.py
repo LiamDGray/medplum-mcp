@@ -23,7 +23,6 @@ from medplum_mcp.audit import (
 )
 from medplum_mcp.benchmarks import run_fhir_benchmarks
 from medplum_mcp.client import MedplumClient
-from medplum_mcp.formal_z3 import prove_all_clinical_entities_z3
 from medplum_mcp.mock_server import MedplumMockServer
 from medplum_mcp.safety import SafetyInvariantViolation
 
@@ -451,22 +450,38 @@ def create_server(
     @server.resource(
         "fhir://verification/status",
         mime_type="application/json",
-        description="Formal verification proofs and SMT reachability status from Microsoft Z3.",
+        description="Deterministic safety interceptor configuration and invariant rules.",
     )
     def get_verification_status_resource() -> str:
-        proofs = prove_all_clinical_entities_z3()
         data = {
-            "overall_status": "PROVEN",
-            "verification_engine": "Microsoft Z3 SMT Solver",
-            "theorem": "Zero Unauthorized Commitment Invariant (Empty Reachable Bad States)",
+            "overall_status": "ENFORCED",
+            "safety_interceptor": "Unicode NFKC Normalization & Deterministic State Gate",
+            "invariant": "Zero Unauthorized Commitment Invariant (Draft mutations only)",
             "entities": {
-                k: {
-                    "entity_type": v.entity_type,
-                    "status": "unsat",
-                    "is_mcp": v.is_mcp,
-                    "max_depth": v.max_depth,
-                }
-                for k, v in proofs.items()
+                "Observation": {
+                    "entity_type": "Observation",
+                    "allowed_statuses": ["registered", "preliminary"],
+                    "blocked_statuses": ["final", "amended", "corrected"],
+                    "enforced": True,
+                },
+                "MedicationRequest": {
+                    "entity_type": "MedicationRequest",
+                    "allowed_statuses": ["draft"],
+                    "blocked_statuses": ["active", "completed", "cancelled"],
+                    "enforced": True,
+                },
+                "Encounter": {
+                    "entity_type": "Encounter",
+                    "allowed_statuses": ["planned", "arrived", "triaged", "in-progress"],
+                    "blocked_statuses": ["finished", "cancelled"],
+                    "enforced": True,
+                },
+                "CarePlan": {
+                    "entity_type": "CarePlan",
+                    "allowed_statuses": ["draft"],
+                    "blocked_statuses": ["active", "completed", "revoked"],
+                    "enforced": True,
+                },
             },
         }
         return json.dumps(data, indent=2)

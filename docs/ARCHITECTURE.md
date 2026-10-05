@@ -233,18 +233,19 @@ The network engine (`crates/medplum-mcp-server/src/network_zero_copy.rs`) elimin
 
 ---
 
-## 9. Formal Mathematical Verification & Typestates
+## 9. Deterministic Safety Architecture & Typestates
 
-The system enforces safety across complementary verification technologies:
+The system enforces safety across complementary verification mechanisms:
 
 1. **Compile-Time Affine Typestates** ([`crates/medplum-mcp-core/src/typestate.rs`](../crates/medplum-mcp-core/src/typestate.rs)):
    - Linear typestates guarantee at compile time that an agent cannot transition an order from `Draft` to `Active` without consuming a non-forgeable `PhysicianWitness` capability token.
    - Preserves state machine integrity via Rust's linear affine type system.
-2. **TLA+ Formal Specifications** ([`formal/fhir_safety.tla`](../formal/fhir_safety.tla) & [`formal/zerocopy_concurrency.tla`](../formal/zerocopy_concurrency.tla)):
-   - Temporal logic invariants proving `ZeroUnauthorizedPrescriptions`, `NoUseAfterFree`, `NoDataRaces`, and `MonotonicSequence` across concurrent worker threads.
-3. **Automated Bounded Model Checking (Z3 SMT & BFS)**:
+2. **Deterministic Runtime Safety Gate** ([`medplum_mcp/safety.py`](../medplum_mcp/safety.py)):
+   - Non-bypassable runtime interceptor blocking all terminal and binding mutations (`active`, `completed`, `cancelled`, `final`).
+   - Unicode NFKC normalization and invisible character stripping preventing homoglyph evasion attacks.
+3. **Automated FSM Invariant Verification**:
    - Evaluates reachability theorems across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
-   - Explores $>1,000$ traces up to depth $k=20$, proving `UNSAT` for terminal reachability under MCP tool invocation.
+   - Proves zero forbidden terminal reachability under MCP tool invocation.
 
 ---
 

@@ -1,13 +1,7 @@
-"""Tests for Clinical FSM Lifecycles, Safety Gate, and Microsoft Z3 Reachability Prover."""
+"""Tests for Clinical FSM Lifecycles and Deterministic Safety Gate Invariants."""
 
 import pytest
-import z3
 
-from medplum_mcp.formal_z3 import (
-    Z3ClinicalFSMModel,
-    prove_all_clinical_entities_z3,
-    prove_clinical_reachability_z3,
-)
 from medplum_mcp.fsm import (
     AllergyIntoleranceLifecycle,
     ClaimLifecycle,
@@ -202,8 +196,8 @@ class TestFSMTransitionsAndReachability:
         assert "entered-in-error" in reachable
 
 
-class TestZ3ReachabilityProver:
-    """Test Microsoft Z3 SMT Reachability Prover."""
+class TestDeterministicFSMReachability:
+    """Test deterministic FSM reachability and Zero Unauthorized Commitment Invariants."""
 
     @pytest.mark.parametrize(
         "entity_type",
@@ -215,28 +209,17 @@ class TestZ3ReachabilityProver:
             "Claim",
         ],
     )
-    def test_prove_clinical_reachability_z3_unsat_in_mcp_mode(self, entity_type: str) -> None:
-        result = prove_clinical_reachability_z3(entity_type, max_depth=10, is_mcp=True)
-        assert result.status == z3.unsat
-        assert result == z3.unsat
+    def test_clinical_reachability_zero_forbidden_in_mcp_mode(self, entity_type: str) -> None:
+        reachable = compute_reachable_states(entity_type, is_mcp=True)
+        leak = reachable & FORBIDDEN_CLINICAL_STATUSES
+        assert leak == set(), (
+            f"Zero Unauthorized Commitment Invariant violated for {entity_type}: "
+            f"reachable forbidden states {leak}"
+        )
 
     def test_unconstrained_system_finds_valid_path_to_terminal_states(self) -> None:
-        # Non-vacuity test: when is_mcp=False, reachability theorem finds sat (path exists)
-        result = prove_clinical_reachability_z3("MedicationRequest", max_depth=5, is_mcp=False)
-        assert result.status == z3.sat
-        assert result == z3.sat
-        assert result.trace is not None
-        assert len(result.trace) > 1
-        assert result.trace[-1] in FORBIDDEN_CLINICAL_STATUSES
-
-    def test_z3_clinical_fsm_model_direct(self) -> None:
-        model = Z3ClinicalFSMModel("MedicationRequest", max_depth=5, is_mcp=True)
-        model.build_model()
-        status = model.check()
-        assert status == z3.unsat
-
-    def test_prove_all_clinical_entities_z3(self) -> None:
-        results = prove_all_clinical_entities_z3(max_depth=10)
-        assert len(results) == 5
-        for res in results.values():
-            assert res.status == z3.unsat
+        # Non-vacuity test: when is_mcp=False, reachability finds forbidden terminal states
+        reachable = compute_reachable_states("MedicationRequest", is_mcp=False)
+        terminal_states = reachable & FORBIDDEN_CLINICAL_STATUSES
+        assert len(terminal_states) > 0, "Unconstrained EHR must permit terminal states"
+        assert "completed" in terminal_states or "active" in terminal_states

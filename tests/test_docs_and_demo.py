@@ -22,7 +22,6 @@ class TestDocumentationSuite:
         # Check links to key docs and specs
         assert "docs/ARCHITECTURE.md" in content or "docs/ARCHITECTURE" in content
         assert "docs/whitepaper.md" in content or "docs/whitepaper" in content
-        assert "formal/fhir_safety.tla" in content
         assert "docs/demo/index.html" in content or "docs/demo" in content
 
         # Check for architectural diagrams / sections
@@ -89,27 +88,8 @@ class TestDocumentationSuite:
             in content
             or "Proving Zero Unauthorized Prescriptions" in content
         )
-        assert "TLA+" in content or "TLA" in content
         assert "Typestate" in content or "typestate" in content or "affine" in content.lower()
-        assert "Inductive" in content or "SMT" in content or "Z3" in content
-
-
-class TestFormalSpecifications:
-    """Verifies TLA+ formal specifications."""
-
-    def test_tla_spec_exists_and_valid(self) -> None:
-        tla_path = REPO_ROOT / "formal" / "fhir_safety.tla"
-        assert tla_path.exists(), "formal/fhir_safety.tla must exist"
-        content = tla_path.read_text(encoding="utf-8")
-        assert len(content) > 500, "TLA+ spec must be complete"
-
-        # Check required TLA+ constructs
-        assert "---- MODULE fhir_safety ----" in content
-        assert "Init" in content
-        assert "Next" in content
-        assert "Spec" in content
-        assert "ZeroUnauthorizedPrescription" in content or "SafetyInvariant" in content
-        assert "====" in content
+        assert "Invariant" in content or "Safety" in content
 
 
 class TestInteractiveDemoConsole:
@@ -165,5 +145,5 @@ class TestInteractiveDemoConsole:
             assert agent in content, f"Demo console must contain config exporter for {agent}"
 
         # Verification explorer components
-        assert "Z3" in content or "SMT" in content
-        assert "TLA+" in content or "fhir_safety" in content
+        assert "typestate" in content.lower() or "safety" in content.lower()
+        assert "invariant" in content.lower()

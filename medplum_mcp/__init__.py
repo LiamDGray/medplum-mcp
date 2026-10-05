@@ -32,12 +32,6 @@ from medplum_mcp.config_generator import (
     run_config_cli,
 )
 from medplum_mcp.demo import ClinicalSandbox
-from medplum_mcp.formal_z3 import (
-    Z3ClinicalFSMModel,
-    Z3ProofResult,
-    prove_all_clinical_entities_z3,
-    prove_clinical_reachability_z3,
-)
 from medplum_mcp.fsm import (
     INITIAL_STATES,
     TRANSITION_MAPS,
@@ -106,11 +100,6 @@ __all__ = [
     "TRANSITION_MAPS",
     "validate_transition",
     "compute_reachable_states",
-    # Microsoft Z3 Formal Verification
-    "Z3ClinicalFSMModel",
-    "Z3ProofResult",
-    "prove_clinical_reachability_z3",
-    "prove_all_clinical_entities_z3",
     # HIPAA Cryptographic Audit Flight Recorder
     "GENESIS_PREV_SIGNATURE",
     "ActionStatus",

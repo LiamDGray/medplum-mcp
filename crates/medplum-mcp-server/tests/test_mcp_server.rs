@@ -423,7 +423,7 @@ async fn test_native_fhir_resources_read() {
     let val2: Value = serde_json::from_str(&verif_resp).unwrap();
     let verif_text = val2["result"]["contents"][0]["text"].as_str().unwrap();
     let verif_json: Value = serde_json::from_str(verif_text).unwrap();
-    assert_eq!(verif_json["overall_status"], "PROVEN");
+    assert_eq!(verif_json["overall_status"], "ENFORCED");
 
     // 3. Read fhir://audit/latest
     let audit_req = json!({

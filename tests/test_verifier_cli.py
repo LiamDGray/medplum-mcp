@@ -26,7 +26,7 @@ def test_run_verification_quick_success() -> None:
     assert report.success is True
     assert report.is_valid is True
 
-    # Stage 1: Z3 SMT Solver Model Checking
+    # Stage 1: Deterministic FSM Invariant Verification
     stage1 = report.stage1_smt
     assert stage1["passed"] is True
     assert stage1["proven_theorems"] == 5
