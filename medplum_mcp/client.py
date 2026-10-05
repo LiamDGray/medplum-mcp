@@ -78,6 +78,69 @@ class MedplumClient:
         return distill_fhir_resource(payload, detail_level=target_level)
 
     # -----------------------------------------------------------------------
+    # OAuth 2.0 / 2.1 Authentication Helpers
+    # -----------------------------------------------------------------------
+
+    @classmethod
+    def authenticate_oauth2(
+        cls,
+        base_url: str,
+        client_id: str,
+        client_secret: str | SecretString,
+        timeout: float = 30.0,
+    ) -> MedplumClient:
+        """Authenticate using OAuth 2.0 / 2.1 Client Credentials flow."""
+        secret_val = (
+            client_secret.get_secret_value()
+            if isinstance(client_secret, SecretString)
+            else client_secret
+        )
+        url = f"{base_url.rstrip('/')}/oauth2/token"
+        resp = requests.post(
+            url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": secret_val,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        token = data.get("access_token")
+        if not token:
+            raise ValueError("Token response did not contain access_token")
+        return cls(base_url=base_url, access_token=SecretString(token), timeout=timeout)
+
+    @classmethod
+    def exchange_code_pkce(
+        cls,
+        base_url: str,
+        code: str,
+        code_verifier: str,
+        redirect_uri: str,
+        timeout: float = 30.0,
+    ) -> MedplumClient:
+        """Authenticate using OAuth 2.1 Authorization Code flow with PKCE."""
+        url = f"{base_url.rstrip('/')}/oauth2/token"
+        resp = requests.post(
+            url,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "code_verifier": code_verifier,
+                "redirect_uri": redirect_uri,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        token = data.get("access_token")
+        if not token:
+            raise ValueError("Token response did not contain access_token")
+        return cls(base_url=base_url, access_token=SecretString(token), timeout=timeout)
+
+    # -----------------------------------------------------------------------
     # Resilient HTTP Execution (Live Mode)
     # -----------------------------------------------------------------------
 

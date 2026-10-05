@@ -1,6 +1,7 @@
 //! Tests for In-Memory Clinical Sandbox, Resilient Client, and OpenAPI Mock Server.
 
 use medplum_mcp_core::safety::SafetyViolationError;
+use medplum_mcp_core::secret::SecretString;
 use medplum_mcp_core::token_diet::DetailLevel;
 use medplum_mcp_server::client::{ClientError, MedplumClient};
 use medplum_mcp_server::mock_server::start_mock_server;
@@ -440,4 +441,47 @@ async fn test_mock_server_full_fhir_r4_endpoints() {
         .await
         .expect("care plan response");
     assert_eq!(cp_resp.status(), reqwest::StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_medplum_client_oauth2_and_pkce_live_mock() {
+    let sandbox = ClinicalSandbox::new_st_jude();
+    let server_handle = start_mock_server(0, sandbox)
+        .await
+        .expect("mock server started");
+    let base_url = server_handle.base_url();
+
+    // 1. Client Credentials flow
+    let client_secret = SecretString::new("test-secret-123");
+    let client = MedplumClient::authenticate_oauth2(&base_url, "my-client-id", &client_secret)
+        .await
+        .expect("OAuth2 client credentials authentication succeeded");
+
+    assert_eq!(
+        client.access_token().map(|t| t.expose_secret()),
+        Some("mock-token")
+    );
+
+    // Verify authenticated client can query FHIR resources
+    let patients = client
+        .search_patients(None, None, None, None)
+        .await
+        .expect("patient query via authenticated client");
+    assert_eq!(patients["resourceType"], "Bundle");
+    assert!(!patients["entry"].as_array().unwrap().is_empty());
+
+    // 2. PKCE Authorization Code flow
+    let pkce_client = MedplumClient::exchange_code_pkce(
+        &base_url,
+        "authz-code-xyz",
+        "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+        "http://localhost/callback",
+    )
+    .await
+    .expect("OAuth2 PKCE authorization code exchange succeeded");
+
+    assert_eq!(
+        pkce_client.access_token().map(|t| t.expose_secret()),
+        Some("mock-token")
+    );
 }

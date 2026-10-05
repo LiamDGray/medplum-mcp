@@ -40,6 +40,9 @@ pub enum ClientError {
 
     #[error("Token distillation error: {0}")]
     Distillation(#[from] TokenDietError),
+
+    #[error("Authentication error ({status}): {message}")]
+    AuthError { status: u16, message: String },
 }
 
 /// High-assurance Medplum FHIR Client.
@@ -105,6 +108,99 @@ impl MedplumClient {
     pub fn with_backoff_ms(mut self, backoff_ms: u64) -> Self {
         self.backoff_ms = backoff_ms;
         self
+    }
+
+    /// Access the active access token if configured.
+    pub fn access_token(&self) -> Option<&SecretString> {
+        self.access_token.as_ref()
+    }
+
+    /// Authenticate against Medplum using OAuth 2.0 / 2.1 Client Credentials flow.
+    pub async fn authenticate_oauth2(
+        base_url: impl Into<String>,
+        client_id: &str,
+        client_secret: &SecretString,
+    ) -> Result<Self, ClientError> {
+        let base_url = base_url.into().trim_end_matches('/').to_string();
+        let http_client = reqwest::Client::new();
+        let token_url = format!("{}/oauth2/token", base_url);
+
+        let form_params = [
+            ("grant_type", "client_credentials"),
+            ("client_id", client_id),
+            ("client_secret", client_secret.expose_secret()),
+        ];
+
+        let resp = http_client
+            .post(&token_url)
+            .form(&form_params)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(ClientError::AuthError {
+                status: status.as_u16(),
+                message: msg,
+            });
+        }
+
+        let body: Value = resp.json().await?;
+        let token = body
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ClientError::AuthError {
+                status: status.as_u16(),
+                message: "Missing access_token in token response".to_string(),
+            })?;
+
+        Ok(Self::new_live(base_url, Some(SecretString::new(token))))
+    }
+
+    /// Authenticate against Medplum using OAuth 2.1 Authorization Code with PKCE flow (RFC 7636).
+    pub async fn exchange_code_pkce(
+        base_url: impl Into<String>,
+        code: &str,
+        code_verifier: &str,
+        redirect_uri: &str,
+    ) -> Result<Self, ClientError> {
+        let base_url = base_url.into().trim_end_matches('/').to_string();
+        let http_client = reqwest::Client::new();
+        let token_url = format!("{}/oauth2/token", base_url);
+
+        let form_params = [
+            ("grant_type", "authorization_code"),
+            ("code", code),
+            ("code_verifier", code_verifier),
+            ("redirect_uri", redirect_uri),
+        ];
+
+        let resp = http_client
+            .post(&token_url)
+            .form(&form_params)
+            .send()
+            .await?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            let msg = resp.text().await.unwrap_or_default();
+            return Err(ClientError::AuthError {
+                status: status.as_u16(),
+                message: msg,
+            });
+        }
+
+        let body: Value = resp.json().await?;
+        let token = body
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ClientError::AuthError {
+                status: status.as_u16(),
+                message: "Missing access_token in token response".to_string(),
+            })?;
+
+        Ok(Self::new_live(base_url, Some(SecretString::new(token))))
     }
 
     /// Access the underlying sandbox if in demo mode.

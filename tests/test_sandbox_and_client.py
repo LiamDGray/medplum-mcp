@@ -490,3 +490,27 @@ class TestMockServerAndLiveClient:
         assert res is not None
         assert res["id"] == "pat-1"
         assert client._session.request.call_count == 2
+
+    def test_live_client_authenticate_oauth2_and_pkce(self, mock_server: MedplumMockServer) -> None:
+        # 1. Client credentials flow
+        client = MedplumClient.authenticate_oauth2(
+            base_url=mock_server.base_url,
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+        )
+        assert client._get_token_value() == "mock-medplum-token-st-jude-secure"
+        assert client.base_url == mock_server.base_url
+
+        # Check authenticated query works
+        bundle = client.search_patients()
+        assert bundle["resourceType"] == "Bundle"
+        assert bundle["total"] >= 10
+
+        # 2. PKCE code exchange flow
+        pkce_client = MedplumClient.exchange_code_pkce(
+            base_url=mock_server.base_url,
+            code="test-code-123",
+            code_verifier="test-verifier-456",
+            redirect_uri="http://localhost/cb",
+        )
+        assert pkce_client._get_token_value() == "mock-medplum-token-st-jude-secure"
