@@ -6,6 +6,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
+use medplum_mcp_core::rkyv_clinical::{
+    archive_clinical_dataset, ArchivedClinicalDataset, ArchivedObservation, ArchivedPatient,
+    ClinicalDataset, MedicationRecord, ObservationRecord, PatientRecord,
+};
 use medplum_mcp_core::safety::{assert_write_permitted, SafetyViolationError};
 use serde_json::{json, Value};
 
@@ -84,6 +88,171 @@ impl ClinicalSandbox {
             "total": count,
             "entry": entries
         })
+    }
+
+    /// Convert current sandbox in-memory state into a strongly-typed ClinicalDataset.
+    pub fn to_clinical_dataset(&self) -> ClinicalDataset {
+        let lock = self.inner.read().expect("sandbox read lock");
+        let mut patients = Vec::with_capacity(lock.patients.len());
+        for p in &lock.patients {
+            let id = p
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let name = p
+                .get("name")
+                .and_then(Value::as_array)
+                .and_then(|arr| arr.first())
+                .and_then(|n| n.get("text").or_else(|| n.get("family")))
+                .and_then(Value::as_str)
+                .unwrap_or("Unknown")
+                .to_string();
+            let gender = p
+                .get("gender")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+                .to_string();
+            let birth_date = p
+                .get("birthDate")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            patients.push(PatientRecord {
+                id,
+                name,
+                gender,
+                birth_date,
+            });
+        }
+
+        let mut observations = Vec::with_capacity(lock.observations.len());
+        for o in &lock.observations {
+            let id = o
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let patient_id = o
+                .get("subject")
+                .and_then(|s| s.get("reference"))
+                .and_then(Value::as_str)
+                .map(|r| r.strip_prefix("Patient/").unwrap_or(r))
+                .unwrap_or("")
+                .to_string();
+            let code = o
+                .get("code")
+                .and_then(|c| c.get("coding"))
+                .and_then(Value::as_array)
+                .and_then(|a| a.first())
+                .and_then(|c| c.get("code"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let code_display = o
+                .get("code")
+                .and_then(|c| c.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let value = o
+                .get("valueQuantity")
+                .and_then(|vq| vq.get("value"))
+                .and_then(Value::as_f64)
+                .unwrap_or(0.0);
+            let unit = o
+                .get("valueQuantity")
+                .and_then(|vq| vq.get("unit"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            observations.push(ObservationRecord {
+                id,
+                patient_id,
+                code,
+                code_display,
+                value,
+                unit,
+            });
+        }
+
+        let mut medication_requests = Vec::with_capacity(lock.medications.len());
+        for m in &lock.medications {
+            let id = m
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let patient_id = m
+                .get("subject")
+                .and_then(|s| s.get("reference"))
+                .and_then(Value::as_str)
+                .map(|r| r.strip_prefix("Patient/").unwrap_or(r))
+                .unwrap_or("")
+                .to_string();
+            let medication_name = m
+                .get("medicationCodeableConcept")
+                .and_then(|c| c.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or("Unknown Medication")
+                .to_string();
+            let status = m
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or("draft")
+                .to_string();
+            let dosage = m
+                .get("dosageInstruction")
+                .and_then(Value::as_array)
+                .and_then(|a| a.first())
+                .and_then(|d| d.get("text"))
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            medication_requests.push(MedicationRecord {
+                id,
+                patient_id,
+                medication_name,
+                status,
+                dosage,
+            });
+        }
+
+        ClinicalDataset {
+            organization_id: "st-jude-research-institute".to_string(),
+            patients,
+            observations,
+            medication_requests,
+        }
+    }
+
+    /// Export current clinical sandbox state to zero-deserialization rkyv binary bytes.
+    pub fn export_rkyv_archive(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
+        let dataset = self.to_clinical_dataset();
+        archive_clinical_dataset(&dataset)
+    }
+
+    /// Query an archived patient by ID directly from raw memory with zero deserialization.
+    pub fn query_archived_patient<'a>(
+        archived: &'a ArchivedClinicalDataset,
+        patient_id: &str,
+    ) -> Option<&'a ArchivedPatient> {
+        archived
+            .patients
+            .iter()
+            .find(|p| p.id.as_str() == patient_id)
+    }
+
+    /// Query archived observations by patient ID directly from raw memory with zero deserialization.
+    pub fn query_archived_observations<'a>(
+        archived: &'a ArchivedClinicalDataset,
+        patient_id: &str,
+    ) -> Vec<&'a ArchivedObservation> {
+        archived
+            .observations
+            .iter()
+            .filter(|o| o.patient_id.as_str() == patient_id)
+            .collect()
     }
 
     // -----------------------------------------------------------------------

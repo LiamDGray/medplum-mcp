@@ -14,6 +14,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use zerocopy::{FromBytes, IntoBytes};
+
+use crate::zerocopy_audit::{
+    compute_binary_header_signature, BinaryAuditHeader, AUDIT_MAGIC, AUDIT_VERSION,
+};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -71,6 +76,78 @@ pub struct AuditEntry {
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+}
+
+impl AuditEntry {
+    /// Convert this AuditEntry into a zero-copy 120-byte C-ABI BinaryAuditHeader.
+    pub fn to_binary_header(&self) -> Result<BinaryAuditHeader, AuditError> {
+        let ts_epoch_ms = DateTime::parse_from_rfc3339(&self.timestamp)
+            .map(|dt| dt.timestamp_millis().max(0) as u64)
+            .unwrap_or(0);
+
+        let action_status = match self.action_status {
+            ActionStatus::Allowed => 0,
+            ActionStatus::Blocked => 1,
+            ActionStatus::Error => 2,
+        };
+
+        let mut payload_digest = [0u8; 32];
+        let digest_bytes = hex::decode(&self.payload_digest)
+            .map_err(|e| AuditError::InvalidKey(format!("invalid payload digest hex: {e}")))?;
+        if digest_bytes.len() == 32 {
+            payload_digest.copy_from_slice(&digest_bytes);
+        }
+
+        let mut prev_signature = [0u8; 32];
+        let prev_sig_bytes = hex::decode(&self.prev_signature)
+            .map_err(|e| AuditError::InvalidKey(format!("invalid prev_signature hex: {e}")))?;
+        if prev_sig_bytes.len() == 32 {
+            prev_signature.copy_from_slice(&prev_sig_bytes);
+        }
+
+        let mut signature = [0u8; 32];
+        let sig_bytes = hex::decode(&self.signature)
+            .map_err(|e| AuditError::InvalidKey(format!("invalid signature hex: {e}")))?;
+        if sig_bytes.len() == 32 {
+            signature.copy_from_slice(&sig_bytes);
+        }
+
+        Ok(BinaryAuditHeader {
+            magic: AUDIT_MAGIC,
+            version: AUDIT_VERSION,
+            action_status,
+            reserved: 0,
+            sequence_id: self.sequence_id,
+            timestamp_epoch_ms: ts_epoch_ms,
+            payload_digest,
+            prev_signature,
+            signature,
+        })
+    }
+
+    /// Construct an AuditEntry from a zero-copy 120-byte C-ABI BinaryAuditHeader.
+    pub fn from_binary_header(header: &BinaryAuditHeader, tool_name: &str) -> Self {
+        let action_status = match header.action_status {
+            0 => ActionStatus::Allowed,
+            1 => ActionStatus::Blocked,
+            _ => ActionStatus::Error,
+        };
+
+        let naive_utc = DateTime::from_timestamp_millis(header.timestamp_epoch_ms as i64)
+            .unwrap_or_else(Utc::now);
+        let timestamp = naive_utc.to_rfc3339();
+
+        Self {
+            sequence_id: header.sequence_id,
+            timestamp,
+            action_status,
+            tool_name: tool_name.to_string(),
+            payload_digest: hex::encode(header.payload_digest),
+            prev_signature: hex::encode(header.prev_signature),
+            signature: hex::encode(header.signature),
+            payload: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,9 +248,11 @@ pub fn compute_entry_signature(
 /// Thread-safe, append-only cryptographic flight recorder for HIPAA audit trails.
 pub struct AuditLogManager {
     log_path: PathBuf,
+    binary_path: Option<PathBuf>,
     secret_key: Vec<u8>,
     last_sequence_id: u64,
     last_signature: String,
+    last_binary_signature: [u8; 32],
 }
 
 impl AuditLogManager {
@@ -200,10 +279,37 @@ impl AuditLogManager {
 
         Ok(Self {
             log_path: path,
+            binary_path: None,
             secret_key: secret_key.to_vec(),
             last_sequence_id,
             last_signature,
+            last_binary_signature: [0u8; 32],
         })
+    }
+
+    /// Configure a secondary zero-copy binary audit log (.bin) written concurrently with .jsonl.
+    pub fn with_binary_log(mut self, binary_path: impl AsRef<Path>) -> Self {
+        let path = binary_path.as_ref().to_path_buf();
+        if path.exists() {
+            if let Ok(meta) = std::fs::metadata(&path) {
+                let len = meta.len();
+                if len >= 120 && len % 120 == 0 {
+                    if let Ok(mut f) = File::open(&path) {
+                        use std::io::{Read, Seek, SeekFrom};
+                        if f.seek(SeekFrom::End(-120)).is_ok() {
+                            let mut buf = [0u8; 120];
+                            if f.read_exact(&mut buf).is_ok() {
+                                if let Ok(hdr) = BinaryAuditHeader::read_from_bytes(&buf) {
+                                    self.last_binary_signature = hdr.signature;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.binary_path = Some(path);
+        self
     }
 
     pub fn log_event(
@@ -242,7 +348,7 @@ impl AuditLogManager {
             timestamp: timestamp.to_string(),
             action_status,
             tool_name: tool_name.to_string(),
-            payload_digest: digest,
+            payload_digest: digest.clone(),
             prev_signature: prev_sig,
             signature: signature.clone(),
             payload: payload.cloned(),
@@ -261,10 +367,54 @@ impl AuditLogManager {
         writeln!(file, "{serialized}")?;
         file.flush()?;
 
+        if let Some(bin_path) = &self.binary_path {
+            if let Some(parent) = bin_path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let ts_epoch_ms = DateTime::parse_from_rfc3339(timestamp)
+                .map(|dt| dt.timestamp_millis().max(0) as u64)
+                .unwrap_or(0);
+            let action_byte = match action_status {
+                ActionStatus::Allowed => 0,
+                ActionStatus::Blocked => 1,
+                ActionStatus::Error => 2,
+            };
+            let mut digest_bytes = [0u8; 32];
+            if let Ok(decoded) = hex::decode(&digest) {
+                if decoded.len() == 32 {
+                    digest_bytes.copy_from_slice(&decoded);
+                }
+            }
+            let mut bin_header = BinaryAuditHeader::new(
+                sequence_id,
+                ts_epoch_ms,
+                action_byte,
+                digest_bytes,
+                self.last_binary_signature,
+            );
+            bin_header.sign(&self.secret_key);
+            self.last_binary_signature = bin_header.signature;
+
+            let mut bin_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(bin_path)?;
+            bin_file.write_all(bin_header.as_bytes())?;
+            bin_file.flush()?;
+        }
+
         self.last_sequence_id = sequence_id;
         self.last_signature = signature;
 
         Ok(entry)
+    }
+
+    /// Cryptographically verify the tamper-evidence and continuity of a binary audit log.
+    pub fn verify_binary_audit_log(
+        path: impl AsRef<Path>,
+        secret_key: &[u8],
+    ) -> Result<AuditVerificationReport, AuditError> {
+        verify_binary_audit_log(path, secret_key)
     }
 
     pub fn get_entries(&self) -> Result<Vec<AuditEntry>, AuditError> {
@@ -400,6 +550,79 @@ pub fn verify_audit_log(
         expected_sequence_id = entry.sequence_id + 1;
         expected_prev_signature = entry.signature;
         verified_count += 1;
+    }
+
+    Ok(AuditVerificationReport {
+        verified_count,
+        is_valid: true,
+    })
+}
+
+/// Cryptographically verify the tamper-evidence and sequential continuity of a binary audit log.
+pub fn verify_binary_audit_log(
+    path: impl AsRef<Path>,
+    secret_key: &[u8],
+) -> Result<AuditVerificationReport, AuditError> {
+    let p = path.as_ref();
+    if !p.exists() {
+        return Err(AuditError::FileNotFound(p.display().to_string()));
+    }
+
+    let file = File::open(p)?;
+    let mut reader = BufReader::new(file);
+    let mut verified_count = 0;
+    let mut expected_seq = 1u64;
+    let mut expected_prev = [0u8; 32];
+
+    use std::io::Read;
+    let mut buffer = [0u8; 120];
+
+    loop {
+        match reader.read_exact(&mut buffer) {
+            Ok(()) => {
+                let header = BinaryAuditHeader::read_from_bytes(&buffer).map_err(|e| {
+                    AuditError::Serialization(serde::de::Error::custom(e.to_string()))
+                })?;
+
+                if header.magic != AUDIT_MAGIC || header.version != AUDIT_VERSION {
+                    return Err(AuditError::MalformedJson {
+                        line: verified_count + 1,
+                        error: "Invalid binary header magic or version".to_string(),
+                    });
+                }
+
+                if header.sequence_id != expected_seq {
+                    return Err(AuditError::BrokenSequence {
+                        line: verified_count + 1,
+                        expected: expected_seq,
+                        found: header.sequence_id,
+                    });
+                }
+
+                if header.prev_signature != expected_prev {
+                    return Err(AuditError::BrokenChain {
+                        line: verified_count + 1,
+                        sequence_id: header.sequence_id,
+                        expected_prev: hex::encode(expected_prev),
+                        found_prev: hex::encode(header.prev_signature),
+                    });
+                }
+
+                let computed_sig = compute_binary_header_signature(&header, secret_key);
+                if computed_sig != header.signature {
+                    return Err(AuditError::ForgedSignature {
+                        line: verified_count + 1,
+                        sequence_id: header.sequence_id,
+                    });
+                }
+
+                expected_prev = header.signature;
+                expected_seq += 1;
+                verified_count += 1;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(AuditError::Io(e)),
+        }
     }
 
     Ok(AuditVerificationReport {

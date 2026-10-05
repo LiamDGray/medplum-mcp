@@ -168,7 +168,13 @@ pub fn run_verification(args: &VerifyArgs) -> Result<VerificationReport, VerifyE
         log_path_str = Some(path.display().to_string());
         let key = resolve_key(args.audit_key.as_deref(), &path);
 
-        match verify_audit_log(&path, &key) {
+        let verification_res = if path.extension().and_then(|ext| ext.to_str()) == Some("bin") {
+            medplum_mcp_core::audit::verify_binary_audit_log(&path, &key)
+        } else {
+            verify_audit_log(&path, &key)
+        };
+
+        match verification_res {
             Ok(v_report) => {
                 audit_block_height = v_report.verified_count;
                 audit_valid = v_report.is_valid;

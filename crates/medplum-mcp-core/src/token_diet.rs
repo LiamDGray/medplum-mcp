@@ -923,3 +923,19 @@ pub fn distill_resource(resource: &Value, level: DetailLevel) -> Value {
         _ => distill_generic(obj, level),
     }
 }
+
+/// Distill a raw JSON byte slice using in-situ SIMD acceleration where supported,
+/// falling back seamlessly to standard serde JSON parsing.
+pub fn distill_raw_slice(
+    raw_bytes: &mut [u8],
+    level: DetailLevel,
+) -> Result<Value, TokenDietError> {
+    match crate::simd_diet::distill_resource_simd(raw_bytes, level) {
+        Ok(simd_distilled) => Ok(simd_distilled.to_value()),
+        Err(_) => {
+            let val: Value = serde_json::from_slice(raw_bytes)
+                .map_err(|e| TokenDietError::InvalidDetailLevel(e.to_string()))?;
+            Ok(distill_resource(&val, level))
+        }
+    }
+}

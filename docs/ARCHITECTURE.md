@@ -215,9 +215,9 @@ let active = draft.issue_with_physician_witness(witness);
 ```
 
 ### In-Situ Borrowed SIMD & Binary Frames
-- **`simd-json`**: In-situ borrowed JSON parsing extracts LOINC codes and values using string slices `&'a str` without heap allocations.
-- **`rkyv`**: Zero-deserialization clinical archives access fields directly from memory-mapped byte buffers.
-- **`zerocopy`**: `BinaryAuditHeader` transmutes fixed 120-byte C-ABI audit headers to and from byte buffers with zero allocations.
+- **`simd-json`**: In-situ borrowed JSON parsing extracts LOINC codes, vital sign values, and identifiers using string slices `&'a str` via `distill_raw_slice` without intermediate heap allocations.
+- **`rkyv`**: Zero-deserialization clinical archives enable `ClinicalSandbox` to snapshot and query clinical entities directly from byte buffers (`access_archived_dataset`) with zero reconstruction overhead.
+- **`zerocopy`**: `BinaryAuditHeader` transmutes fixed 120-byte C-ABI audit headers to and from byte buffers with zero allocations, wired into `AuditLogManager` dual binary logging and CLI verification.
 
 ---
 

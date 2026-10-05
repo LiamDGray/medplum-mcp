@@ -59,6 +59,153 @@ pub enum SimdDistilledResource<'a> {
     Generic(SimdDistilledGeneric<'a>),
 }
 
+impl<'a> SimdDistilledResource<'a> {
+    /// Return the FHIR resourceType.
+    pub fn resource_type(&self) -> &'a str {
+        match self {
+            SimdDistilledResource::Patient(_) => "Patient",
+            SimdDistilledResource::Observation(_) => "Observation",
+            SimdDistilledResource::MedicationRequest(_) => "MedicationRequest",
+            SimdDistilledResource::Generic(g) => g.resource_type,
+        }
+    }
+
+    /// Return the resource ID.
+    pub fn resource_id(&self) -> &'a str {
+        match self {
+            SimdDistilledResource::Patient(p) => p.id,
+            SimdDistilledResource::Observation(o) => o.id,
+            SimdDistilledResource::MedicationRequest(m) => m.id,
+            SimdDistilledResource::Generic(g) => g.id,
+        }
+    }
+
+    /// Convert the borrowed SIMD representation into a canonical serde_json::Value.
+    pub fn to_value(&self) -> serde_json::Value {
+        match self {
+            SimdDistilledResource::Patient(p) => {
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "resourceType".to_string(),
+                    serde_json::Value::String("Patient".to_string()),
+                );
+                map.insert(
+                    "id".to_string(),
+                    serde_json::Value::String(p.id.to_string()),
+                );
+                map.insert(
+                    "name".to_string(),
+                    serde_json::Value::String(p.name.to_string()),
+                );
+                if let Some(gender) = p.gender {
+                    map.insert(
+                        "gender".to_string(),
+                        serde_json::Value::String(gender.to_string()),
+                    );
+                }
+                if let Some(dob) = p.birth_date {
+                    map.insert(
+                        "birthDate".to_string(),
+                        serde_json::Value::String(dob.to_string()),
+                    );
+                }
+                if let Some(mrn) = p.identifier {
+                    map.insert(
+                        "identifier".to_string(),
+                        serde_json::Value::String(mrn.to_string()),
+                    );
+                }
+                serde_json::Value::Object(map)
+            }
+            SimdDistilledResource::Observation(o) => {
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "resourceType".to_string(),
+                    serde_json::Value::String("Observation".to_string()),
+                );
+                map.insert(
+                    "id".to_string(),
+                    serde_json::Value::String(o.id.to_string()),
+                );
+                map.insert(
+                    "status".to_string(),
+                    serde_json::Value::String(o.status.to_string()),
+                );
+                map.insert(
+                    "code".to_string(),
+                    serde_json::Value::String(o.code.to_string()),
+                );
+                if let Some(cd) = o.code_display {
+                    map.insert(
+                        "codeDisplay".to_string(),
+                        serde_json::Value::String(cd.to_string()),
+                    );
+                }
+                if let Some(vq) = o.value_quantity {
+                    map.insert("value".to_string(), serde_json::json!(vq));
+                } else if let Some(vs) = o.value_string {
+                    map.insert(
+                        "value".to_string(),
+                        serde_json::Value::String(vs.to_string()),
+                    );
+                }
+                if let Some(u) = o.unit {
+                    map.insert("unit".to_string(), serde_json::Value::String(u.to_string()));
+                }
+                if let Some(ed) = o.effective_date {
+                    map.insert(
+                        "effectiveDateTime".to_string(),
+                        serde_json::Value::String(ed.to_string()),
+                    );
+                }
+                serde_json::Value::Object(map)
+            }
+            SimdDistilledResource::MedicationRequest(m) => {
+                let mut map = serde_json::Map::new();
+                map.insert(
+                    "resourceType".to_string(),
+                    serde_json::Value::String("MedicationRequest".to_string()),
+                );
+                map.insert(
+                    "id".to_string(),
+                    serde_json::Value::String(m.id.to_string()),
+                );
+                map.insert(
+                    "status".to_string(),
+                    serde_json::Value::String(m.status.to_string()),
+                );
+                map.insert(
+                    "intent".to_string(),
+                    serde_json::Value::String(m.intent.to_string()),
+                );
+                map.insert(
+                    "medication".to_string(),
+                    serde_json::Value::String(m.medication.to_string()),
+                );
+                if let Some(pid) = m.patient_id {
+                    map.insert(
+                        "patientId".to_string(),
+                        serde_json::Value::String(pid.to_string()),
+                    );
+                }
+                if let Some(ao) = m.authored_on {
+                    map.insert(
+                        "authoredOn".to_string(),
+                        serde_json::Value::String(ao.to_string()),
+                    );
+                }
+                serde_json::Value::Object(map)
+            }
+            SimdDistilledResource::Generic(g) => {
+                serde_json::json!({
+                    "resourceType": g.resource_type,
+                    "id": g.id,
+                })
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Zero-Copy Extraction Helpers
 // ---------------------------------------------------------------------------
