@@ -2,6 +2,13 @@
 name = "medplum-mcp-core"
 version = "0.1.0"
 edition = "2021"
+description = "High-assurance FHIR R4 token distillation, affine typestates, and zero-copy cryptographic audit vault for Medplum MCP"
+license = "Apache-2.0"
+repository = "https://github.com/LiamDGray/medplum-mcp"
+homepage = "https://github.com/LiamDGray/medplum-mcp"
+readme = "README.md"
+keywords = ["fhir", "mcp", "medplum", "healthcare", "ai"]
+categories = ["development-tools", "api-bindings"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -25,4 +32,3 @@ default = []
 
 [lints]
 workspace = true
-

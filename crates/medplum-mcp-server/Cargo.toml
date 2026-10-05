@@ -2,9 +2,16 @@
 name = "medplum-mcp-server"
 version = "0.1.0"
 edition = "2021"
+description = "High-performance Model Context Protocol (MCP) server for Medplum FHIR with Streamable HTTP and zero-copy IPC"
+license = "Apache-2.0"
+repository = "https://github.com/LiamDGray/medplum-mcp"
+homepage = "https://github.com/LiamDGray/medplum-mcp"
+readme = "README.md"
+keywords = ["mcp", "fhir", "medplum", "ai-agents", "healthcare"]
+categories = ["network-programming", "development-tools"]
 
 [dependencies]
-medplum-mcp-core = { path = "../medplum-mcp-core" }
+medplum-mcp-core = { path = "../medplum-mcp-core", version = "0.1.0" }
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "query"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
@@ -28,4 +35,3 @@ io-uring = ["dep:io-uring"]
 proptest = "1.5"
 tempfile = "3.10"
 zerocopy = "0.8"
-

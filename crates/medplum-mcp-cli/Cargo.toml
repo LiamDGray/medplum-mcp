@@ -2,6 +2,13 @@
 name = "medplum-mcp-cli"
 version = "0.1.0"
 edition = "2021"
+description = "CLI entrypoint, TUI dashboard, continuous soak harness, and multi-client config generator for Medplum MCP"
+license = "Apache-2.0"
+repository = "https://github.com/LiamDGray/medplum-mcp"
+homepage = "https://github.com/LiamDGray/medplum-mcp"
+readme = "README.md"
+keywords = ["mcp", "fhir", "cli", "tui", "medplum"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "medplum-mcp-rs"
@@ -12,8 +19,8 @@ name = "medplum_mcp_cli"
 path = "src/lib.rs"
 
 [dependencies]
-medplum-mcp-core = { path = "../medplum-mcp-core" }
-medplum-mcp-server = { path = "../medplum-mcp-server" }
+medplum-mcp-core = { path = "../medplum-mcp-core", version = "0.1.0" }
+medplum-mcp-server = { path = "../medplum-mcp-server", version = "0.1.0" }
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4.5", features = ["derive", "env"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -30,6 +37,5 @@ zerocopy = "0.8"
 ratatui = "0.29"
 crossterm = "0.28"
 simd-json = "0.14"
-
 
 [dev-dependencies]
