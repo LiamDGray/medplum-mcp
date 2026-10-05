@@ -1,0 +1,127 @@
+name: "CI / 5-Tier Verification Matrix"
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-checks:
+    name: "Tier 1: Rust Lint, Format & Unit Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy Linter
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Cargo Test Suite
+        run: cargo test --workspace
+
+  python-checks:
+    name: "Tier 1: Python Strict Typestate & Test Suite"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff Linter & Formatter
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Mypy Strict Type Check
+        run: mypy medplum_mcp tests
+
+      - name: Pytest Suite
+        run: pytest -v
+
+  fuzz-smoke:
+    name: "Tier 2: Coverage-Guided Fuzzing Smoke (libFuzzer + ASAN)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - name: Run Fuzz Smoke Test
+        run: ./run_fuzz_checks.sh
+
+  miri-ub-verification:
+    name: "Tier 3: Miri Undefined Behavior & Provenance Analysis"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run Miri Verification
+        run: ./run_miri_checks.sh
+
+  kani-proofs:
+    name: "Tier 4: Kani Mathematical Formal Verification"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: model-checking/kani-github-action@v1
+        with:
+          args: "-p medplum-mcp-core --tests"
+
+  soak-smoke:
+    name: "Tier 5: Soak Stress & Leak Smoke Harness"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI Binary
+        run: cargo build --release -p medplum-mcp-cli
+
+      - name: Run Smoke Soak
+        run: ./target/release/medplum-mcp-rs soak --duration-secs 10
+
+  mcp-conformance:
+    name: "Conformance: Official Model Context Protocol Conformance"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build Server Binary
+        run: cargo build -p medplum-mcp-cli
+
+      - name: Run Server Initialize Conformance
+        run: ./scripts/run_conformance.sh server-initialize
+
+      - name: Run DNS Rebinding Protection Conformance
+        run: ./scripts/run_conformance.sh dns-rebinding-protection
