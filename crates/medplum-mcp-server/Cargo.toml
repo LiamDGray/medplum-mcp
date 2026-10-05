@@ -19,6 +19,7 @@ async-trait = "0.1"
 io-uring = { version = "0.7", optional = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
 libc = "0.2"
+uuid = { version = "1.27", features = ["v4"] }
 
 [features]
 io-uring = ["dep:io-uring"]

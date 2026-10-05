@@ -161,12 +161,18 @@ impl McpServer {
 
         match method {
             "initialize" => {
+                let client_protocol_version = params
+                    .get("protocolVersion")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("2024-11-05");
                 let result = json!({
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": client_protocol_version,
                     "capabilities": {
                         "tools": { "listChanged": false },
                         "resources": { "subscribe": false, "listChanged": false },
-                        "prompts": { "listChanged": false }
+                        "prompts": { "listChanged": false },
+                        "logging": {},
+                        "completion": {}
                     },
                     "serverInfo": {
                         "name": self.name,
@@ -354,6 +360,24 @@ impl McpServer {
                 jsonrpc: "2.0".to_string(),
                 id,
                 result: Some(json!({})),
+                error: None,
+            }),
+            "logging/setLevel" => Some(JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                id,
+                result: Some(json!({})),
+                error: None,
+            }),
+            "completion/complete" => Some(JsonRpcResponse {
+                jsonrpc: "2.0".to_string(),
+                id,
+                result: Some(json!({
+                    "completion": {
+                        "values": [],
+                        "total": 0,
+                        "hasMore": false
+                    }
+                })),
                 error: None,
             }),
             _ => Some(JsonRpcResponse {
