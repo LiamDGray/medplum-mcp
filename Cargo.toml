@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/medplum-mcp-core",
+    "crates/medplum-mcp-server",
+    "crates/medplum-mcp-cli",
+]

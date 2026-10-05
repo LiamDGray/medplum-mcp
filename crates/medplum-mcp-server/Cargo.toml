@@ -1,0 +1,29 @@
+[package]
+name = "medplum-mcp-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+medplum-mcp-core = { path = "../medplum-mcp-core" }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "query"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+thiserror = "2.0"
+tracing = "0.1"
+async-trait = "0.1"
+io-uring = { version = "0.7", optional = true }
+tokio-stream = { version = "0.1", features = ["sync"] }
+libc = "0.2"
+
+[features]
+io-uring = ["dep:io-uring"]
+
+[dev-dependencies]
+proptest = "1.5"
+tempfile = "3.10"
+zerocopy = "0.8"
+
