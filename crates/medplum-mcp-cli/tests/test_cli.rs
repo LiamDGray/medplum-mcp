@@ -400,12 +400,65 @@ fn test_soak_execution_short_duration() {
         workers: 4,
         report_interval_secs: 1,
         log_path: temp_log.path().to_path_buf(),
+        tally_file: None,
     };
 
     let res = medplum_mcp_cli::soak::run_soak_test(&args);
     assert!(
         res.is_ok(),
         "Short soak test must run and complete with zero errors"
+    );
+}
+
+#[test]
+fn test_cli_parsing_soak_indefinite_and_tally() {
+    let args = vec![
+        "medplum-mcp-rs",
+        "soak",
+        "--duration-secs",
+        "0",
+        "--tally-file",
+        "live_tally.json",
+    ];
+
+    let cli = Cli::try_parse_from(args).expect("Should parse indefinite soak with tally file");
+    match cli.command {
+        Commands::Soak(s) => {
+            assert_eq!(s.duration_secs, 0);
+            assert_eq!(s.tally_file, Some(PathBuf::from("live_tally.json")));
+        }
+        _ => panic!("Expected Soak command"),
+    }
+}
+
+#[test]
+fn test_soak_execution_with_tally_file() {
+    let temp_log = NamedTempFile::new().unwrap();
+    let temp_tally = NamedTempFile::new().unwrap();
+    let args = medplum_mcp_cli::cli::SoakArgs {
+        duration_secs: 2,
+        workers: 4,
+        report_interval_secs: 1,
+        log_path: temp_log.path().to_path_buf(),
+        tally_file: Some(temp_tally.path().to_path_buf()),
+    };
+
+    let res = medplum_mcp_cli::soak::run_soak_test(&args);
+    assert!(res.is_ok(), "Soak test with tally file must succeed");
+
+    // Verify tally file exists and contains valid JSON metrics
+    let tally_content = std::fs::read_to_string(temp_tally.path()).expect("Tally file must exist");
+    let tally_json: serde_json::Value =
+        serde_json::from_str(&tally_content).expect("Tally file must be valid JSON");
+
+    assert!(
+        tally_json.get("total_operations").unwrap().as_u64().unwrap() > 0,
+        "Total operations in tally must be > 0"
+    );
+    assert_eq!(
+        tally_json.get("invariant_violations").unwrap().as_u64().unwrap(),
+        0,
+        "Violations in tally must be 0"
     );
 }
 

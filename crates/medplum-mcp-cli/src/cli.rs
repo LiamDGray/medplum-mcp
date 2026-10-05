@@ -195,7 +195,7 @@ pub struct BenchArgs {
 /// Arguments for `soak` long-duration fuzzing and stress subcommand.
 #[derive(Args, Debug, Clone)]
 pub struct SoakArgs {
-    /// Duration in seconds to run the continuous soak test (default: 5400 = 90 minutes)
+    /// Duration in seconds to run the continuous soak test (default: 5400 = 90 minutes; 0 = indefinite)
     #[arg(long, default_value_t = 5400)]
     pub duration_secs: u64,
 
@@ -210,6 +210,10 @@ pub struct SoakArgs {
     /// Log file path to append human-readable progress and JSON metrics
     #[arg(long, default_value = "soak_test_report.log")]
     pub log_path: PathBuf,
+
+    /// Optional path to live tally JSON file to record/accumulate operation totals indefinitely
+    #[arg(long)]
+    pub tally_file: Option<PathBuf>,
 }
 
 /// Arguments for `tui` live terminal dashboard subcommand.

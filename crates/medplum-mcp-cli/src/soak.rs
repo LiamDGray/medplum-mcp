@@ -58,12 +58,75 @@ fn get_current_rss_mb() -> f64 {
     0.0
 }
 
+/// Atomically write current soak test metrics and tally to disk as JSON.
+fn write_tally(
+    path: &std::path::Path,
+    metrics: &SoakMetrics,
+    elapsed_secs: f64,
+    rss_mb: f64,
+) -> std::io::Result<()> {
+    let dist = metrics.total_distillations.load(Ordering::Relaxed);
+    let safe = metrics.total_safety_checks.load(Ordering::Relaxed);
+    let audit = metrics.total_audit_entries.load(Ordering::Relaxed);
+    let sand = metrics.total_sandbox_ops.load(Ordering::Relaxed);
+    let zc = metrics.total_zerocopy_ops.load(Ordering::Relaxed);
+    let viols = metrics.invariant_violations.load(Ordering::SeqCst);
+    let total = dist + safe + audit + sand + zc;
+
+    let tally_json = serde_json::json!({
+        "last_updated": chrono::Utc::now().to_rfc3339(),
+        "elapsed_seconds": elapsed_secs,
+        "total_operations": total,
+        "distillation_operations": dist,
+        "safety_checks": safe,
+        "audit_entries": audit,
+        "sandbox_operations": sand,
+        "zerocopy_operations": zc,
+        "invariant_violations": viols,
+        "rss_mb": rss_mb,
+    });
+
+    let temp_path = path.with_extension("tmp");
+    std::fs::write(&temp_path, serde_json::to_string_pretty(&tally_json)?)?;
+    std::fs::rename(&temp_path, path)?;
+    Ok(())
+}
+
 /// Run long-duration soak test, continuous fuzzing, and invariant validation.
 pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let start_time = Instant::now();
+    let indefinite = args.duration_secs == 0;
     let target_duration = Duration::from_secs(args.duration_secs);
     let is_running = Arc::new(AtomicBool::new(true));
     let metrics = Arc::new(SoakMetrics::default());
+
+    // Load initial tally counts if tally file already exists
+    if let Some(tally_path) = &args.tally_file {
+        if tally_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(tally_path) {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(dist) = val.get("distillation_operations").and_then(|v| v.as_u64()) {
+                        metrics.total_distillations.store(dist, Ordering::SeqCst);
+                    }
+                    if let Some(safe) = val.get("safety_checks").and_then(|v| v.as_u64()) {
+                        metrics.total_safety_checks.store(safe, Ordering::SeqCst);
+                    }
+                    if let Some(audit) = val.get("audit_entries").and_then(|v| v.as_u64()) {
+                        metrics.total_audit_entries.store(audit, Ordering::SeqCst);
+                    }
+                    if let Some(sand) = val.get("sandbox_operations").and_then(|v| v.as_u64()) {
+                        metrics.total_sandbox_ops.store(sand, Ordering::SeqCst);
+                    }
+                    if let Some(zc) = val.get("zerocopy_operations").and_then(|v| v.as_u64()) {
+                        metrics.total_zerocopy_ops.store(zc, Ordering::SeqCst);
+                    }
+                    if let Some(viols) = val.get("invariant_violations").and_then(|v| v.as_u64()) {
+                        metrics.invariant_violations.store(viols, Ordering::SeqCst);
+                    }
+                }
+            }
+        }
+    }
 
     // Temporary shared audit ledger
     let temp_audit_file = NamedTempFile::new()?;
@@ -88,12 +151,16 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
             .bright_cyan()
             .bold()
     );
+    let dur_display = if indefinite {
+        "Indefinite (∞)".to_string()
+    } else {
+        format!("{}s ({:.1} min)", args.duration_secs, (args.duration_secs as f64) / 60.0)
+    };
     println!(
         "{}",
         format!(
-            "║      Duration: {:<7}s ({:.1} min) | Workers: {:<4} | Log: {:<20} ║",
-            args.duration_secs,
-            (args.duration_secs as f64) / 60.0,
+            "║      Duration: {:<17} | Workers: {:<4} | Log: {:<20} ║",
+            dur_display,
             args.workers,
             args.log_path.display()
         )
@@ -112,9 +179,9 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         .open(&args.log_path)?;
     writeln!(
         log_file,
-        "=== SOAK TEST STARTED AT {} | TARGET DURATION: {}s ===",
+        "=== SOAK TEST STARTED AT {} | TARGET DURATION: {} ===",
         chrono::Utc::now().to_rfc3339(),
-        args.duration_secs
+        if indefinite { "INDEFINITE".to_string() } else { format!("{}s", args.duration_secs) }
     )?;
 
     // Spawn Worker Threads
@@ -216,7 +283,7 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
     let mut last_report_time = Instant::now();
     let mut last_total_ops = 0u64;
 
-    while start_time.elapsed() < target_duration {
+    while indefinite || start_time.elapsed() < target_duration {
         thread::sleep(report_interval);
 
         let elapsed = start_time.elapsed();
@@ -241,10 +308,16 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         let report_res = verify_audit_log(&audit_log_path, secret_key);
         let audit_intact = report_res.map(|r| r.is_valid).unwrap_or(false);
 
+        let target_display = if indefinite {
+            "∞".to_string()
+        } else {
+            format!("{:>6.1}s", target_duration.as_secs_f64())
+        };
+
         let status_str = format!(
-            "[{:>6.1}s / {:>6.1}s] Ops: {:>10} | {:>9.1} ops/s | Violations: {:>2} | RSS: {:>5.1} MB | Audit: {}",
+            "[{:>6.1}s / {}] Ops: {:>10} | {:>9.1} ops/s | Violations: {:>2} | RSS: {:>5.1} MB | Audit: {}",
             elapsed.as_secs_f64(),
-            target_duration.as_secs_f64(),
+            target_display,
             total_ops,
             throughput,
             viols,
@@ -255,6 +328,11 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         println!("{}", status_str);
         writeln!(log_file, "{}", status_str)?;
         log_file.flush()?;
+
+        // Live tally update to disk
+        if let Some(tally_path) = &args.tally_file {
+            let _ = write_tally(tally_path, &metrics, elapsed.as_secs_f64(), rss_mb);
+        }
 
         if viols > 0 {
             eprintln!(
@@ -281,6 +359,11 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
     let final_audit = metrics.total_audit_entries.load(Ordering::Relaxed);
     let final_total = final_dist + final_safe + final_audit;
     let final_report = verify_audit_log(&audit_log_path, secret_key)?;
+
+    // Final tally update
+    if let Some(tally_path) = &args.tally_file {
+        let _ = write_tally(tally_path, &metrics, total_elapsed, get_current_rss_mb());
+    }
 
     println!(
         "\n{}",
