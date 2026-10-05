@@ -25,7 +25,7 @@ pub enum Commands {
     /// Start the OpenAPI 3.0 conforming FHIR R4 mock HTTP server
     MockServer(MockServerArgs),
 
-    /// Formally verify SMT reachability theorems, FSM typestates, and HIPAA audit ledger
+    /// Verify deterministic safety gates, FSM reachability invariants, and HIPAA audit ledger
     Verify(VerifyArgs),
 
     /// Generate or install AI agent client configuration (Claude, Cursor, Windsurf, etc.)

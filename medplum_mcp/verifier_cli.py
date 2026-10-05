@@ -107,11 +107,14 @@ class VerificationReport:
             "quick_mode": self.quick,
             "duration_ms": round(self.duration_ms, 2),
             "stages": {
+                "stage1_reachability": self.stage1_smt,
                 "stage1_smt_z3": self.stage1_smt,
                 "stage2_fsm_adversarial": self.stage2_fsm,
                 "stage3_audit_ledger": self.stage3_audit,
             },
             "summary": {
+                "invariants_satisfied": self.stage1_smt.get("proven_theorems", 0),
+                "invariants_total": self.stage1_smt.get("total_theorems", 0),
                 "theorems_proven": self.stage1_smt.get("proven_theorems", 0),
                 "theorems_total": self.stage1_smt.get("total_theorems", 0),
                 "audit_entries_verified": self.stage3_audit.get("block_height", 0),
@@ -692,7 +695,7 @@ def run_verification(
             stage1_theorems[entity] = {
                 "entity": entity,
                 "proven": is_proven,
-                "solver_status": "unsat" if is_proven else "sat",
+                "solver_status": "satisfied" if is_proven else "violated",
                 "max_depth": depth,
                 "counterexample": list(forbidden_reached) if forbidden_reached else None,
             }
@@ -719,6 +722,9 @@ def run_verification(
         "total_theorems": len(CLINICAL_ENTITIES),
         "proven_theorems": proven_theorems,
         "theorems": stage1_theorems,
+        "total_invariants": len(CLINICAL_ENTITIES),
+        "satisfied_invariants": proven_theorems,
+        "invariants": stage1_theorems,
     }
 
     # Stage 2: FSM Lifecycles and Homoglyph Robustness

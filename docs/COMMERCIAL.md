@@ -71,7 +71,7 @@ Enterprise Commercial Licenses include binding legal protections essential for h
 * **HIPAA Business Associate Agreement (BAA)**: Legally binding execution confirming compliance with 45 CFR Part 160 and Part 164 Subparts A and E.
 * **Intellectual Property Indemnification**: Full uncapped defense and indemnity against third-party copyright, patent, or intellectual property claims.
 * **Service Level Agreement (SLA)**: 99.99% availability guarantee with 24/7/365 Tier-1 clinical engineering support and 15-minute response times for critical severity incidents.
-* **Quarterly Penetration Testing & Cryptographic Verification Reports**: Independent third-party audit reports validating memory safety, zero-leak isolation, and SMT reachability proofs.
+* **Quarterly Penetration Testing & Cryptographic Verification Reports**: Independent third-party audit reports validating memory safety, zero-leak isolation, and deterministic safety invariant verification.
 
 ---
 

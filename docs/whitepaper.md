@@ -22,7 +22,7 @@ In clinical pharmacotherapy, the margin of error is zero. In pediatric oncology,
 
 | Failure Mode | Root Cause in LLM | Clinical Consequence | Conventional Mitigation | HAMCP Deterministic Defense |
 |:---|:---|:---|:---|:---|
-| **Rogue Active Prescription** | Hallucinated confirmation or injected directive | Active chemotherapy or opioid order in EHR | System prompt instructions | **Mathematical 403 Safety Interceptor** |
+| **Rogue Active Prescription** | Hallucinated confirmation or injected directive | Active chemotherapy or opioid order in EHR | System prompt instructions | **Deterministic 403 Safety Interceptor** |
 | **Silent Log Deletion** | Agent attempts cleanup after tool error | Loss of legal audit trail | Standard application logs | **Cryptographic HMAC Hash Chaining** |
 | **Context Window Exhaustion** | Raw 285KB FHIR JSON bundles | Truncated allergies or drug interaction warnings | Naive string truncation | **3-Tier Semantic Distillation Engine** |
 | **Credential Exfiltration** | Prompt injection attacks model context | Exposure of EHR OAuth credentials | Ephemeral API keys | **Zero-Leak Secret Masking + Vault Engine** |

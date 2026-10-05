@@ -244,7 +244,7 @@ The system enforces safety across complementary verification mechanisms:
    - Non-bypassable runtime interceptor blocking all terminal and binding mutations (`active`, `completed`, `cancelled`, `final`).
    - Unicode NFKC normalization and invisible character stripping preventing homoglyph evasion attacks.
 3. **Automated FSM Invariant Verification**:
-   - Evaluates reachability theorems across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
+   - Evaluates reachability invariants across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
    - Proves zero forbidden terminal reachability under MCP tool invocation.
 
 ---

@@ -3,7 +3,7 @@
 > **Evaluation Baseline**: Medplum HL7 FHIR R4 Enterprise MCP Server  
 > **Environment**: Linux x86_64, 8 Cores (AMD EPYC / Intel Xeon), Linux Kernel 6.8 with `io_uring` support  
 > **Rust Profile**: `release` (`opt-level = 3`, LTO, target-cpu=native)  
-> **Python Profile**: CPython 3.12 with asyncio, ujson, and PyZ3  
+> **Python Profile**: CPython 3.12 with asyncio and ujson  
 
 ---
 
@@ -130,8 +130,8 @@ The Rust implementation has been comprehensively tested, fuzzed, and formally ve
    - Fuzzing HMAC audit ledgers with randomized single-bit flips, timestamp regressions, and block truncations.
    - Fuzzing 3-tier token distillation asserting monotonic byte-size reduction and bundle count preservation.
    - Fuzzing `SecretString` non-leakage invariants across arbitrary ASCII and UTF-8 strings.
-3. **Formal Bounded Model Checking (24 tests)**:
-   - Mathematical reachability theorems evaluated across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
+3. **State Machine Reachability Verification (24 tests)**:
+   - State machine reachability invariants evaluated across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
    - Proving that for any execution path depth $1 \le k \le 20$, no sequence of autonomous MCP actions can reach a terminal state from `Draft`.
    - Formal capability token proof that `PhysicianWitness` cannot be forged.
 4. **HTTP Mock Server & Resilient Client Edge-Cases (16 tests)**:

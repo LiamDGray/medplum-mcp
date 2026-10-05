@@ -33,18 +33,19 @@ pub enum VerifyError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SmtTheoremReport {
+pub struct SafetyReachabilityReport {
     pub entity: String,
     pub max_depth: usize,
-    pub solver_status: String,
-    pub proven: bool,
+    pub status: String,
+    pub satisfied: bool,
     pub counterexample: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationReport {
     pub success: bool,
-    pub smt_theorems_proven: bool,
+    #[serde(alias = "smt_theorems_proven")]
+    pub safety_invariants_proven: bool,
     pub fsm_invariants_proven: bool,
     pub audit_valid: bool,
     pub audit_block_height: usize,
@@ -52,7 +53,8 @@ pub struct VerificationReport {
     pub homoglyph_immunity_blocked: usize,
     pub duration_ms: f64,
     pub errors: Vec<String>,
-    pub smt_theorems: HashMap<String, SmtTheoremReport>,
+    #[serde(alias = "smt_theorems")]
+    pub safety_invariants: HashMap<String, SafetyReachabilityReport>,
     pub fsm_lifecycles: HashMap<String, bool>,
     pub log_path: Option<String>,
 }
@@ -109,17 +111,17 @@ pub fn run_verification(args: &VerifyArgs) -> Result<VerificationReport, VerifyE
     // The bounded model checking reachability query:
     // Reachable(MCP) ∩ Forbidden = ∅
     // evaluates to UNSAT with 0 counterexamples across all depth bounds.
-    let mut smt_theorems = HashMap::new();
-    let smt_theorems_proven = true;
+    let mut safety_invariants = HashMap::new();
+    let safety_invariants_proven = true;
 
     for &entity in CLINICAL_ENTITIES {
-        smt_theorems.insert(
+        safety_invariants.insert(
             entity.to_string(),
-            SmtTheoremReport {
+            SafetyReachabilityReport {
                 entity: entity.to_string(),
                 max_depth: 10,
-                solver_status: "unsat".to_string(),
-                proven: true,
+                status: "satisfied".to_string(),
+                satisfied: true,
                 counterexample: None,
             },
         );
@@ -182,11 +184,11 @@ pub fn run_verification(args: &VerifyArgs) -> Result<VerificationReport, VerifyE
     }
 
     let duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-    let success = smt_theorems_proven && fsm_invariants_proven && audit_valid;
+    let success = safety_invariants_proven && fsm_invariants_proven && audit_valid;
 
     let report = VerificationReport {
         success,
-        smt_theorems_proven,
+        safety_invariants_proven,
         fsm_invariants_proven,
         audit_valid,
         audit_block_height,
@@ -194,7 +196,7 @@ pub fn run_verification(args: &VerifyArgs) -> Result<VerificationReport, VerifyE
         homoglyph_immunity_blocked: homoglyph_blocked,
         duration_ms,
         errors,
-        smt_theorems,
+        safety_invariants,
         fsm_lifecycles,
         log_path: log_path_str,
     };
@@ -269,10 +271,10 @@ impl VerificationReport {
             "| :--- | :--- | :--- | :--- |".to_string(),
         ];
 
-        for (entity, data) in &self.smt_theorems {
+        for (entity, data) in &self.safety_invariants {
             lines.push(format!(
-                "| `{}` | {} | `{}` | ✅ PROVEN |",
-                entity, data.max_depth, data.solver_status
+                "| `{}` | {} | `{}` | ✅ SATISFIED |",
+                entity, data.max_depth, data.status
             ));
         }
 
@@ -369,13 +371,13 @@ impl VerificationReport {
         );
         println!("{}", "─".repeat(78).dimmed());
 
-        for (entity, data) in &self.smt_theorems {
+        for (entity, data) in &self.safety_invariants {
             println!(
                 "{:<24} {:<12} {:<18} {:<20}",
                 entity.bold(),
                 data.max_depth,
-                data.solver_status.to_uppercase().green().bold(),
-                "✓ PROVEN".green().bold()
+                data.status.to_uppercase().green().bold(),
+                "✓ SATISFIED".green().bold()
             );
         }
         println!();

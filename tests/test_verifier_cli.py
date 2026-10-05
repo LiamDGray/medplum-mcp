@@ -39,7 +39,7 @@ def test_run_verification_quick_success() -> None:
     ):
         assert entity in stage1["theorems"]
         assert stage1["theorems"][entity]["proven"] is True
-        assert str(stage1["theorems"][entity]["solver_status"]).lower() == "unsat"
+        assert str(stage1["theorems"][entity]["solver_status"]).lower() in ("satisfied", "unsat")
 
     # Stage 2: Adversarial FSM Lifecycle & Homoglyph Immunity
     stage2 = report.stage2_fsm
@@ -74,6 +74,7 @@ def test_verifier_report_outputs() -> None:
     d = report.to_dict()
     assert d["status"] == "PASSED"
     assert d["success"] is True
+    assert "stage1_reachability" in d["stages"]
     assert "stage1_smt_z3" in d["stages"]
     assert "stage2_fsm_adversarial" in d["stages"]
     assert "stage3_audit_ledger" in d["stages"]
@@ -114,6 +115,7 @@ def test_cli_verify_json_output(capsys: pytest.CaptureFixture[str]) -> None:
     assert data["success"] is True
     assert data["status"] == "PASSED"
     assert "stages" in data
+    assert data["stages"]["stage1_reachability"]["passed"] is True
     assert data["stages"]["stage1_smt_z3"]["passed"] is True
     assert data["stages"]["stage2_fsm_adversarial"]["passed"] is True
     assert data["stages"]["stage3_audit_ledger"]["passed"] is True

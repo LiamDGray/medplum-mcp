@@ -253,7 +253,7 @@ fn test_verify_valid_audit_log() {
     );
     assert_eq!(report.audit_block_height, 2);
     assert!(report.fsm_invariants_proven);
-    assert!(report.smt_theorems_proven);
+    assert!(report.safety_invariants_proven);
 }
 
 #[test]
