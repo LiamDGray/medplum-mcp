@@ -457,7 +457,98 @@ For high-throughput audit flight recording, `medplum-mcp` implements fixed-layou
 
 ---
 
-## 7. The 5-Tier Verification & Quality Assurance Pipeline
+## 7. State-of-the-Art (October 2026) Protocol Capabilities
+
+To meet and exceed the capabilities of the foremost MCP servers in the ecosystem, `medplum-mcp` implements four production-grade protocol advancements:
+
+```mermaid
+flowchart TD
+    subgraph ProtocolFeatures["SOTA MCP Protocol Advancements"]
+        RFC9728["RFC 9728 OAuth Metadata\n(/.well-known/oauth-protected-resource)"]
+        Cancellation["Cooperative Wire Cancellation\n(notifications/cancelled dispatch)"]
+        CategoryFilter["Context Window Optimization\n(tools/list category filtering)"]
+        OpenAPIExport["OpenAPI 3.1 & Overlay 1.0\n(AI 'Use when:' docstring export)"]
+    end
+
+    subgraph Benefits["Architectural Impact"]
+        B1["Enterprise Identity & Scoped Bearer Tokens"]
+        B2["Zero Leaked Compute on Aborted Reasoning"]
+        B3["Zero Attention Swamping (16 -> 2 focused tools)"]
+        B4["Self-Describing API & Interoperability"]
+    end
+
+    RFC9728 --> B1
+    Cancellation --> B2
+    CategoryFilter --> B3
+    OpenAPIExport --> B4
+```
+
+```
++-----------------------------------------------------------------------------------------+
+|                      SOTA PROTOCOL ADVANCEMENTS (ASCII ARCHITECTURE)                    |
++-----------------------------+-----------------------------------------------------------+
+| Protocol Capability         | Implementation & Runtime Guarantee                        |
++-----------------------------+-----------------------------------------------------------+
+| RFC 9728 Protected Resource | Server publishes /.well-known/oauth-protected-resource   |
+|                             | metadata declaring resource URI, auth servers, and scopes |
+|                             | (patient/*.read, fhirUser, openid) for OAuth 2.1 clients. |
++-----------------------------+-----------------------------------------------------------+
+| Cooperative Cancellation    | Dispatches notifications/cancelled with requestId/reason. |
+|                             | Aborts handler execution cleanly and commits cancellation |
+|                             | event to cryptographic audit ledger without socket drop.  |
++-----------------------------+-----------------------------------------------------------+
+| Context Window Optimization | tools/list accepts category filter (e.g. 'drafts', 'query')|
+|                             | Exposes only relevant subset, preventing LLM attention    |
+|                             | swamping and saving thousands of tokens per prompt cycle. |
++-----------------------------+-----------------------------------------------------------+
+| OpenAPI 3.1 & Overlay 1.0   | medplum-mcp-rs openapi [--overlay] exports complete spec  |
+|                             | with OpenAPI Overlay 1.0 AI docstrings ('Use when: ...')  |
+|                             | and x-ai-use-when metadata for agent generators.          |
++-----------------------------+-----------------------------------------------------------+
+```
+
+### 7.1. RFC 9728 OAuth 2.0 Protected Resource Metadata
+In alignment with modern OAuth 2.1 profiles, `medplum-mcp-rs mock-server` and SSE endpoints expose `/.well-known/oauth-protected-resource`, allowing identity providers and agentic gateways to verify resource indicator scopes prior to token issuance:
+```json
+{
+  "resource": "https://api.medplum.com/fhir/R4",
+  "authorization_servers": ["https://api.medplum.com/oauth2"],
+  "scopes_supported": [
+    "openid",
+    "profile",
+    "email",
+    "fhirUser",
+    "patient/*.read",
+    "patient/*.write",
+    "user/*.read"
+  ],
+  "bearer_methods_supported": ["header"],
+  "resource_documentation": "https://docs.medplum.com"
+}
+```
+
+### 7.2. Cooperative Wire Cancellation Handling
+When a frontier reasoning model (or client user) aborts an ongoing clinical query, it emits a `notifications/cancelled` frame containing the `requestId` and `reason`. `medplum-mcp-rs` intercepts the notification, terminates worker execution, and logs the event to the cryptographic HMAC flight recorder without terminating connection transport.
+
+### 7.3. Context Window Optimization via Category-Filtered Tool Discovery
+Exposing dozens of granular FHIR tools swarms the model's context window with extraneous schemas. `medplum-mcp` introduces category-scoped tool discovery:
+- `tools/list` with `{"category": "drafts"}`: Returns only mutation tools (`create_medication_draft`, `create_observation_draft`).
+- `tools/list` with `{"category": "query"}`: Returns only the 14 read-only clinical query tools.
+- Default `tools/list`: Returns all 16 tools for backwards compatibility.
+
+### 7.4. Automated OpenAPI 3.1 & Overlay 1.0 Specification Export
+The CLI command `medplum-mcp-rs openapi --overlay` exports the complete MCP server as an OpenAPI 3.1 specification enriched with OpenAPI Overlay 1.0 AI docstrings:
+```bash
+# Output OpenAPI 3.1 specification to stdout
+medplum-mcp-rs openapi
+
+# Output specification with AI-friendly 'Use when: ...' guidance
+medplum-mcp-rs openapi --overlay --output openapi_medplum_mcp.json
+```
+
+---
+
+## 8. The 5-Tier Verification & Quality Assurance Pipeline
 
 `medplum-mcp` is verified across 5 complementary verification layers:
 
@@ -514,7 +605,7 @@ flowchart TD
 
 ---
 
-## 8. Empirical Microsecond Performance Benchmarks
+## 9. Empirical Microsecond Performance Benchmarks
 
 All four architectural recommendations were empirically benchmarked using hardware performance counters (`medplum-mcp-rs bench`):
 
@@ -527,7 +618,7 @@ All four architectural recommendations were empirically benchmarked using hardwa
 
 ---
 
-## 9. Server Tool Reference (16 Clinical Tools)
+## 10. Server Tool Reference (16 Clinical Tools)
 
 The server exposes 16 clinical tools organized across clinical query and draft mutation domains:
 
@@ -557,7 +648,7 @@ The server exposes 16 clinical tools organized across clinical query and draft m
 
 ---
 
-## 10. Live 60 FPS Ratatui Terminal UI Dashboard
+## 11. Live 60 FPS Ratatui Terminal UI Dashboard
 
 The `medplum-mcp-rs tui` command launches a 60 FPS interactive terminal dashboard providing:
 - Real-time token reduction gauges (-94.7% Compact, -89.1% Standard, -91.9% Executive).
@@ -568,7 +659,7 @@ The `medplum-mcp-rs tui` command launches a 60 FPS interactive terminal dashboar
 
 ---
 
-## 11. Enterprise Architecture & Commercial Governance
+## 12. Enterprise Architecture & Commercial Governance
 
 `medplum-mcp` is released under a dual-licensing model (Business Source License 1.1 transitioning to Apache 2.0 on a 4-year sunset). 
 

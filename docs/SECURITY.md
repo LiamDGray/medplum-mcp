@@ -110,6 +110,7 @@ sequenceDiagram
 * **Genesis Anchor**: The initial entry is cryptographically anchored to a constant genesis signature ($0^{64}$).
 * **Hash Chaining**: Altering, reordering, deleting, or injecting any record invalidates all subsequent signatures across the entire chain.
 * **Dual Format (Configurable)**: Supports standard human-readable JSONL text, 120-byte C-ABI zero-copy binary format (`--audit-format binary`), or dual logging (`--audit-format dual`).
+* **Cancellation Auditability**: Client-issued `notifications/cancelled` events are cryptographically hashed and committed to the audit chain, ensuring a non-repudiable record of aborted operations and client session termination.
 * **Independent Verification**: The CLI subcommand `medplum-mcp-rs verify --strict` recalculates all cryptographic signatures from genesis to verify log integrity in linear $O(N)$ time.
 
 ---
@@ -129,6 +130,10 @@ sequenceDiagram
   - When writes are disabled (`allow_writes == false`), `assert_write_permitted` **never** permits writes.
   - Character homoglyph normalization and invisible character filtering are 100% panic-free across all UTF-8 characters.
   - Zero-copy binary audit header transmutation has zero buffer overruns, division-by-zero, or arithmetic overflows.
+
+### 3.4. OAuth 2.1 & RFC 9728 Protected Resource Delegation
+- Rather than accepting untracked bearer tokens, the server exposes `/.well-known/oauth-protected-resource` under RFC 9728, declaring its canonical resource identifier (`https://api.medplum.com/fhir/R4`), authorization server URI, and strict clinical scopes (`patient/*.read`, `fhirUser`).
+- Enforces audience and resource-indicator binding on incoming bearer tokens to prevent token-forwarding attacks across downstream tools.
 
 ---
 
