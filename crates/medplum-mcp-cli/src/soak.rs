@@ -8,7 +8,7 @@
 //! 5. Memory RSS leak detection (monitoring resident set size over time).
 
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -19,8 +19,12 @@ use medplum_mcp_core::audit::{verify_audit_log, ActionStatus, AuditLogManager};
 use medplum_mcp_core::benchmarks::SYNTHETIC_BUNDLE;
 use medplum_mcp_core::safety::assert_write_permitted;
 use medplum_mcp_core::token_diet::{distill_resource, DetailLevel};
+use medplum_mcp_core::typestate::{MedicationRequest, PhysicianWitness};
 use medplum_mcp_core::zerocopy_audit::{verify_binary_header, BinaryAuditHeader};
+use medplum_mcp_server::client::MedplumClient;
+use medplum_mcp_server::mcp::McpServer;
 use medplum_mcp_server::sandbox::ClinicalSandbox;
+use medplum_mcp_server::splice_transport::{SplicePipe, SpliceTransport};
 use tempfile::NamedTempFile;
 use zerocopy::{FromBytes, IntoBytes};
 
@@ -34,6 +38,9 @@ pub struct SoakMetrics {
     pub total_audit_entries: AtomicU64,
     pub total_sandbox_ops: AtomicU64,
     pub total_zerocopy_ops: AtomicU64,
+    pub total_mcp_requests: AtomicU64,
+    pub total_splice_ops: AtomicU64,
+    pub total_typestate_ops: AtomicU64,
     pub invariant_violations: AtomicU64,
 }
 
@@ -70,8 +77,11 @@ fn write_tally(
     let audit = metrics.total_audit_entries.load(Ordering::Relaxed);
     let sand = metrics.total_sandbox_ops.load(Ordering::Relaxed);
     let zc = metrics.total_zerocopy_ops.load(Ordering::Relaxed);
+    let mcp = metrics.total_mcp_requests.load(Ordering::Relaxed);
+    let splice = metrics.total_splice_ops.load(Ordering::Relaxed);
+    let typestate = metrics.total_typestate_ops.load(Ordering::Relaxed);
     let viols = metrics.invariant_violations.load(Ordering::SeqCst);
-    let total = dist + safe + audit + sand + zc;
+    let total = dist + safe + audit + sand + zc + mcp + splice + typestate;
 
     let tally_json = serde_json::json!({
         "last_updated": chrono::Utc::now().to_rfc3339(),
@@ -82,6 +92,9 @@ fn write_tally(
         "audit_entries": audit,
         "sandbox_operations": sand,
         "zerocopy_operations": zc,
+        "mcp_requests": mcp,
+        "splice_operations": splice,
+        "typestate_operations": typestate,
         "invariant_violations": viols,
         "rss_mb": rss_mb,
     });
@@ -121,6 +134,18 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
                     if let Some(zc) = val.get("zerocopy_operations").and_then(|v| v.as_u64()) {
                         metrics.total_zerocopy_ops.store(zc, Ordering::SeqCst);
                     }
+                    if let Some(mcp) = val.get("mcp_requests").and_then(|v| v.as_u64()) {
+                        metrics.total_mcp_requests.store(mcp, Ordering::SeqCst);
+                    }
+                    if let Some(splice) = val.get("splice_operations").and_then(|v| v.as_u64()) {
+                        metrics.total_splice_ops.store(splice, Ordering::SeqCst);
+                    }
+                    if let Some(type_ops) = val.get("typestate_operations").and_then(|v| v.as_u64())
+                    {
+                        metrics
+                            .total_typestate_ops
+                            .store(type_ops, Ordering::SeqCst);
+                    }
                     if let Some(viols) = val.get("invariant_violations").and_then(|v| v.as_u64()) {
                         metrics.invariant_violations.store(viols, Ordering::SeqCst);
                     }
@@ -140,6 +165,21 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
 
     // Shared in-memory clinical sandbox
     let sandbox = Arc::new(ClinicalSandbox::new_st_jude());
+
+    // Tokio runtime for async MCP request dispatch
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(args.workers.clamp(1, 4))
+        .enable_all()
+        .build()?;
+    let rt_handle = rt.handle().clone();
+
+    // High-Assurance MCP Server instance
+    let client = MedplumClient::new_demo(ClinicalSandbox::new_st_jude());
+    let mcp_server = Arc::new(McpServer::new(
+        client,
+        Some(Arc::clone(&audit_manager)),
+        true,
+    ));
 
     println!(
         "\n{}",
@@ -200,6 +240,8 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         let m = Arc::clone(&metrics);
         let am = Arc::clone(&audit_manager);
         let sb = Arc::clone(&sandbox);
+        let mcp_srv = Arc::clone(&mcp_server);
+        let rth = rt_handle.clone();
         let bundle = SYNTHETIC_BUNDLE.clone();
 
         let handle = thread::spawn(move || {
@@ -282,6 +324,173 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
                     }
                 }
                 m.total_zerocopy_ops.fetch_add(1, Ordering::Relaxed);
+
+                // 6. Full-Stack MCP JSON-RPC Server Invocations
+                let req_idx = iter % 10;
+                let rpc_req = match req_idx {
+                    0 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/list"
+                    }),
+                    1 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_get_patient",
+                            "arguments": { "patient_id": "pat-stjude-01" }
+                        }
+                    }),
+                    2 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_list_observations",
+                            "arguments": { "patient_id": "pat-stjude-01", "detail_level": "compact" }
+                        }
+                    }),
+                    3 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_list_medication_requests",
+                            "arguments": { "patient_id": "pat-stjude-01", "detail_level": "standard" }
+                        }
+                    }),
+                    4 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_list_conditions",
+                            "arguments": { "patient_id": "pat-stjude-01" }
+                        }
+                    }),
+                    5 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_create_medication_draft",
+                            "arguments": {
+                                "patient_id": "pat-stjude-01",
+                                "medication_code": "RxNorm:105364",
+                                "dosage": "25mg oral daily",
+                                "status": "draft"
+                            }
+                        }
+                    }),
+                    6 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_create_observation_draft",
+                            "arguments": {
+                                "patient_id": "pat-stjude-01",
+                                "code": "883-9",
+                                "value": 72.0,
+                                "unit": "bpm",
+                                "status": "draft"
+                            }
+                        }
+                    }),
+                    7 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "prompts/get",
+                        "params": {
+                            "name": "clinical_encounter_triage",
+                            "arguments": { "patient_id": "pat-stjude-01" }
+                        }
+                    }),
+                    8 => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "resources/read",
+                        "params": {
+                            "uri": "audit://latest"
+                        }
+                    }),
+                    _ => serde_json::json!({
+                        "jsonrpc": "2.0",
+                        "id": iter,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "medplum_create_medication_draft",
+                            "arguments": {
+                                "patient_id": "pat-stjude-01",
+                                "medication_code": "RxNorm:105364",
+                                "dosage": "25mg oral daily",
+                                "status": "active"
+                            }
+                        }
+                    }),
+                };
+
+                let req_str = rpc_req.to_string();
+                if let Some(resp_str) = rth.block_on(mcp_srv.handle_jsonrpc_message(&req_str)) {
+                    if req_idx == 9 {
+                        // Invariant: Forbidden status "active" MUST produce an error in MCP response
+                        if !resp_str.contains("error") && !resp_str.contains("isError") {
+                            m.invariant_violations.fetch_add(1, Ordering::SeqCst);
+                            panic!("CRITICAL SAFETY BREACH: MCP permitted active prescription mutation!");
+                        }
+                    }
+                    m.total_mcp_requests.fetch_add(1, Ordering::Relaxed);
+                }
+
+                // 7. Linux Pipe Splice Zero-Copy IPC Streaming
+                if iter.is_multiple_of(25) {
+                    if let (Ok(mut pipe1), Ok(mut pipe2)) = (SplicePipe::new(), SplicePipe::new()) {
+                        let msg = b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n";
+                        if SpliceTransport::write_to_pipe(&mut pipe1, msg).is_ok() {
+                            if let (Some(in_fd), Some(out_fd)) =
+                                (pipe1.reader_raw_fd(), pipe2.writer_raw_fd())
+                            {
+                                if SpliceTransport::splice_pipe_to_pipe(in_fd, out_fd, msg.len())
+                                    .is_ok()
+                                {
+                                    let mut buf = vec![0u8; msg.len()];
+                                    if let Some(reader) = pipe2.reader_mut() {
+                                        if reader.read_exact(&mut buf).is_ok() && buf == msg {
+                                            m.total_splice_ops.fetch_add(1, Ordering::Relaxed);
+                                        } else {
+                                            m.invariant_violations.fetch_add(1, Ordering::SeqCst);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 8. Compile-Time Affine Typestate FSM Transitions
+                if iter.is_multiple_of(10) {
+                    let draft = MedicationRequest::new_draft(
+                        "med-soak",
+                        "pat-stjude-01",
+                        "RxNorm:105364",
+                        "25mg",
+                    );
+                    if draft.status() != "draft" {
+                        m.invariant_violations.fetch_add(1, Ordering::SeqCst);
+                    }
+                    let witness =
+                        PhysicianWitness::new("Practitioner/dr-01", "NPI-001", "sig-soak");
+                    let active = draft.issue_with_physician_witness(witness);
+                    if active.status() != "active" {
+                        m.invariant_violations.fetch_add(1, Ordering::SeqCst);
+                    }
+                    let cancelled = active.cancel("Soak test cancellation");
+                    if cancelled.status() != "cancelled" {
+                        m.invariant_violations.fetch_add(1, Ordering::SeqCst);
+                    }
+                    m.total_typestate_ops.fetch_add(1, Ordering::Relaxed);
+                }
             }
         });
         worker_handles.push(handle);
@@ -304,9 +513,12 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         let audit = metrics.total_audit_entries.load(Ordering::Relaxed);
         let sand = metrics.total_sandbox_ops.load(Ordering::Relaxed);
         let zc = metrics.total_zerocopy_ops.load(Ordering::Relaxed);
+        let mcp = metrics.total_mcp_requests.load(Ordering::Relaxed);
+        let splice = metrics.total_splice_ops.load(Ordering::Relaxed);
+        let typestate = metrics.total_typestate_ops.load(Ordering::Relaxed);
         let viols = metrics.invariant_violations.load(Ordering::SeqCst);
 
-        let total_ops = dist + safe + audit + sand + zc;
+        let total_ops = dist + safe + audit + sand + zc + mcp + splice + typestate;
         let delta_ops = total_ops.saturating_sub(last_total_ops);
         last_total_ops = total_ops;
 
@@ -366,7 +578,19 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
     let final_dist = metrics.total_distillations.load(Ordering::Relaxed);
     let final_safe = metrics.total_safety_checks.load(Ordering::Relaxed);
     let final_audit = metrics.total_audit_entries.load(Ordering::Relaxed);
-    let final_total = final_dist + final_safe + final_audit;
+    let final_sand = metrics.total_sandbox_ops.load(Ordering::Relaxed);
+    let final_zc = metrics.total_zerocopy_ops.load(Ordering::Relaxed);
+    let final_mcp = metrics.total_mcp_requests.load(Ordering::Relaxed);
+    let final_splice = metrics.total_splice_ops.load(Ordering::Relaxed);
+    let final_typestate = metrics.total_typestate_ops.load(Ordering::Relaxed);
+    let final_total = final_dist
+        + final_safe
+        + final_audit
+        + final_sand
+        + final_zc
+        + final_mcp
+        + final_splice
+        + final_typestate;
     let final_report = verify_audit_log(&audit_log_path, secret_key)?;
 
     // Final tally update
@@ -396,8 +620,13 @@ pub fn run_soak_test(args: &SoakArgs) -> Result<(), Box<dyn std::error::Error + 
         total_elapsed / 60.0
     );
     println!("  • Total Operations:       {}", final_total);
+    println!("  • MCP JSON-RPC Requests:  {}", final_mcp);
     println!("  • Distillation Operations:{}", final_dist);
     println!("  • Safety Gate Checks:     {}", final_safe);
+    println!("  • Pipe Splice Operations: {}", final_splice);
+    println!("  • Typestate Transitions:  {}", final_typestate);
+    println!("  • Sandbox Operations:     {}", final_sand);
+    println!("  • Zero-Copy Headers:      {}", final_zc);
     println!("  • Audit Log Entries:      {}", final_audit);
     println!(
         "  • Audit Verification:     {}",

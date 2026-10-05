@@ -472,6 +472,60 @@ fn test_soak_execution_with_tally_file() {
 }
 
 #[test]
+fn test_soak_execution_exercises_full_stack_and_ipc() {
+    let temp_log = NamedTempFile::new().unwrap();
+    let temp_tally = NamedTempFile::new().unwrap();
+    let args = medplum_mcp_cli::cli::SoakArgs {
+        duration_secs: 2,
+        workers: 4,
+        report_interval_secs: 1,
+        log_path: temp_log.path().to_path_buf(),
+        tally_file: Some(temp_tally.path().to_path_buf()),
+    };
+
+    let res = medplum_mcp_cli::soak::run_soak_test(&args);
+    assert!(res.is_ok(), "Enhanced soak test must succeed");
+
+    let tally_content = std::fs::read_to_string(temp_tally.path()).expect("Tally file must exist");
+    let tally_json: serde_json::Value =
+        serde_json::from_str(&tally_content).expect("Tally file must be valid JSON");
+
+    assert!(
+        tally_json
+            .get("mcp_requests")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0,
+        "Soak test must exercise real MCP JSON-RPC requests"
+    );
+    assert!(
+        tally_json
+            .get("splice_operations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0,
+        "Soak test must exercise Linux pipe splice IPC operations"
+    );
+    assert!(
+        tally_json
+            .get("typestate_operations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0,
+        "Soak test must exercise typestate FSM operations"
+    );
+    assert_eq!(
+        tally_json
+            .get("invariant_violations")
+            .unwrap()
+            .as_u64()
+            .unwrap(),
+        0,
+        "Violations in tally must be 0"
+    );
+}
+
+#[test]
 fn test_cli_parsing_tui() {
     let args = vec![
         "medplum-mcp-rs",
