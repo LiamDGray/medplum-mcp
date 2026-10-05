@@ -10,7 +10,7 @@
 
 As Large Language Models (LLMs) and autonomous agents are granted tool-use capabilities to interact directly with Electronic Health Record (EHR) systems via protocols such as the Model Context Protocol (MCP), the blast radius of model hallucinations expands from misinformation to direct clinical harm. An unconstrained autonomous agent with write access to an HL7 FHIR datastore could issue or activate lethal medication orders, alter critical allergy records, or trigger unapproved chemotherapy infusions. 
 
-In this paper, we present the formal verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. We prove through **compile-time affine typestate enforcement**, **deterministic runtime state gates**, and **exhaustive FSM reachability analysis** that no reachable execution trace enables an autonomous AI agent to transition a clinical order into an `active`, `completed`, or executable state without explicit, verified human-in-the-loop clinical sign-off. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) and 21 CFR Part 11 requirements, alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
+In this paper, we present the safety and verification architecture of **`medplum-mcp`**, a clinical MCP server enforcing the **Zero Unauthorized Commitment Invariant** across all interactions with HL7 FHIR R4 repositories. Because external AI agents interact via untyped JSON-RPC text protocols, the primary safety perimeter is a **hardened runtime safety interceptor** featuring Unicode NFKC homoglyph normalization and strict draft-only status filtering, complemented by **compile-time affine typestate enforcement** for internal Rust SDK callers and **automated FSM reachability analysis**. Furthermore, we demonstrate a tamper-evident **HMAC-SHA256 chained audit flight recorder** fulfilling HIPAA § 164.312(b) audit control requirements (inspired by RFC 3881 / ATNA specifications), alongside a **3-tier token distillation engine** delivering an 89.1% reduction in FHIR payload token weight without clinical information loss.
 
 ---
 
@@ -60,7 +60,7 @@ Notice that under an intercepted transition, $\sigma.\mathcal{R}$ is strictly in
 
 To ensure zero implementation gaps between clinical policy and runtime execution, `medplum-mcp` enforces safety across three deterministic layers:
 
-### 3.1 Compile-Time Affine Typestate Enforcement
+### 3.1 Compile-Time Affine Typestates (Internal Rust SDK)
 In the Rust core, clinical orders are represented via linear affine typestates (`MedicationRequest<State>`). State transitions consume ownership of the draft resource, requiring an unforgeable capability token:
 
 ```rust
@@ -87,11 +87,11 @@ impl MedicationRequest<Draft> {
 ```
 
 The Rust borrow checker and type system mathematically guarantee that:
-1. No execution path can transition a `MedicationRequest<Draft>` to `MedicationRequest<Active>` without consuming a verified `PhysicianWitness`.
-2. AI agent execution contexts lack the private credential constructors required to instantiate `PhysicianWitness`, rendering rogue state transitions uncompilable.
+1. Internal Rust code cannot transition a `MedicationRequest<Draft>` to `MedicationRequest<Active>` without consuming a verified `PhysicianWitness`.
+2. Invariants are enforced structurally at compile time for native SDK consumers, preventing bypass via logic errors or unauthorized internal calls.
 
-### 3.2 Deterministic Runtime Safety Interceptor & Homoglyph Defense
-At runtime, all agent mutations pass through `assert_write_permitted`:
+### 3.2 Deterministic Runtime Safety Interceptor (Primary AI Agent Boundary)
+Because external AI agents communicate via untyped JSON-RPC text over standard I/O or network connections, compile-time type checks cannot constrain their incoming payloads. The **deterministic runtime safety gate** (`assert_write_permitted`) forms the actual defensive perimeter:
 1. **Explicit Permission Gating**: Mutations are categorically rejected unless `--allow-writes` is explicitly configured.
 2. **Strict Status Filtering**: Inbound resources containing binding statuses (`active`, `completed`, `cancelled`, `final`, `amended`, `corrected`) trigger an immediate `SafetyInvariantViolation` (HTTP 403 / MCP tool error).
 3. **Unicode NFKC Normalization**: Status strings undergo Unicode NFKC normalization and invisible character stripping before lookup against forbidden status sets, defeating adversarial homoglyph injections (e.g. Cyrillic `а` or Greek `ο` substitutions).
@@ -108,7 +108,7 @@ is exhaustively evaluated. Across all reachable states under MCP tool invocation
 
 ## 4. Cryptographic Audit Flight Recorder
 
-Compliance with HIPAA Security Rule 45 CFR § 164.312(b) and 21 CFR Part 11 requires that health data modifications maintain an unalterable, non-repudiable audit trail.
+Compliance with HIPAA Security Rule 45 CFR § 164.312(b) requires that health data modifications maintain an unalterable, non-repudiable audit trail.
 
 `medplum-mcp` implements a forward-secure cryptographic flight recorder based on **HMAC-SHA256 block chaining**:
 

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Parser, Debug)]
 #[command(
     name = "medplum-mcp-rs",
-    about = "Production-grade Rust MCP server for Medplum HL7 FHIR with HIPAA cryptographic audit and compile-time safety gates",
+    about = "Production-grade Rust MCP server for Medplum HL7 FHIR with HIPAA cryptographic audit and deterministic safety gates",
     version
 )]
 pub struct Cli {

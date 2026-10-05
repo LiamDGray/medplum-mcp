@@ -848,7 +848,7 @@ impl MedicationRequest<Draft> {
         }
     }
 }
-// Verified at compile-time: AI agents cannot instantiate PhysicianWitness`,
+// Enforced at compile-time: Native callers cannot invoke authorize() without PhysicianWitness capability token`,
 
       interceptor: `// Runtime Safety Interceptor: Dynamic Gate & Homoglyph Evasion Defense
 // Blocks any non-draft terminal status with zero bypass

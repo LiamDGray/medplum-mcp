@@ -16,15 +16,15 @@
 ## Key Capabilities & Architectural Invariants
 
 1. **Zero Unauthorized Commitment Invariant**:
-   Autonomous AI agents are mathematically prohibited from issuing active prescriptions or changing clinical states to executing statuses (`active`, `completed`, `cancelled`). All mutations are restricted to `draft` states and enforced by compile-time affine typestates (`MedicationRequest<Draft>`) and runtime non-bypassable safety gates.
+   Autonomous AI agents are strictly prohibited from issuing active prescriptions or changing clinical states to executing statuses (`active`, `completed`, `cancelled`). External LLM agents communicate via JSON-RPC and are intercepted at runtime by non-bypassable safety gates with Unicode NFKC homoglyph normalization (`assert_write_permitted`), while internal Rust SDK consumers are governed by compile-time affine typestates (`MedicationRequest<Draft>`).
 2. **Three-Tier FHIR Token Distillation Engine**:
    Distills voluminous HL7 FHIR payloads into `compact` (15 KB, ~94.7% reduction), `standard` (31 KB, ~89.1% reduction), and `executive` (23 KB, ~91.9% reduction) schemas while preserving 100% of clinical coding semantics (LOINC, SNOMED-CT, RxNorm). Delivers **609,655 ops/sec** at **1.64 µs** latency.
 3. **Zero-Copy Pipe Transport & Axum HTTP Streaming**:
    High-throughput streaming over Linux pipes (`splice(2)` / `vmsplice(2)`) for stdio IPC with Claude Desktop/Cursor without user-space buffer copies, combined with production Axum SSE/HTTP transport with native `rustls`.
 4. **Cryptographic HMAC-SHA256 Flight Recorder**:
    Tamper-evident hash-chained audit log satisfying HIPAA § 164.312(b), RFC 3881, and ATNA healthcare audit requirements.
-5. **Deterministic Safety Verification & Typestates**:
-   The safety barrier enforces non-bypassable runtime status filtering and compile-time affine typestates in Rust (`MedicationRequest<Draft>`), guaranteeing that autonomous agents cannot transition clinical orders into executable states without human clinician witness.
+5. **Deterministic Safety Verification**:
+   The safety perimeter enforces non-bypassable runtime status filtering and Unicode NFKC normalization, guaranteeing that external agents cannot transition clinical orders into executable states without human clinician witness. For internal Rust development, affine typestates (`MedicationRequest<Draft>`) provide structural compile-time safety.
 6. **Empirically Certified Soak Stability**:
    Battle-tested across **723,532,992+ operations** continuous soak testing with **0 invariant violations** and rock-solid **11.4 MB RSS**.
 7. **Live 60 FPS Ratatui Terminal UI Dashboard**:
@@ -239,5 +239,5 @@ All commits must pass both hermetic verification gates:
 Dual-licensed under the **Business Source License 1.1** ([`LICENSE`](LICENSE)), transitioning to **Apache 2.0** on a 4-year sunset. 
 
 - **Open-Source Edition**: Free for evaluation, research, and non-production development.
-- **Enterprise Commercial License**: Required for hospital system production deployment, offering dynamic HIPAA Safe Harbor de-identification, hardware Ed25519 physician witness sign-off, multi-tenant Merkle DAG cloud replication, SLA guarantees, and enterprise indemnity. Details are specified in [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
+- **Enterprise Commercial License**: Required for hospital system production deployment, offering production SLAs, executed HIPAA BAA, enterprise intellectual property indemnification, custom EHR integrations, and dedicated clinical engineering support. Details are specified in [`docs/COMMERCIAL.md`](docs/COMMERCIAL.md).
 

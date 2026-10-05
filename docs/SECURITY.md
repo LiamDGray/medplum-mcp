@@ -46,14 +46,14 @@ In compliance with federal audit control requirements, every tool execution, mut
 
 ---
 
-## 3. Formal State Machine & Memory Invariants
+## 3. Defense-in-Depth Safety Architecture
 
-1. **Compile-Time Affine Typestates**:
-   - Mutating clinical orders from `Draft` to `Active` is structurally impossible without presenting an unforgeable `PhysicianWitness` capability token.
-   - AI agents cannot forge capability tokens at compile time.
-2. **Dynamic Runtime Safety Gate (`assert_write_permitted`)**:
-   - Blocks any mutation attempting terminal or irrevocable states (`active`, `completed`, `cancelled`, `final`).
+1. **Deterministic Runtime Safety Gate (`assert_write_permitted`)**:
+   - **Primary Agent Boundary**: AI agents submit untyped JSON-RPC text strings. The runtime safety interceptor is the non-bypassable barrier that blocks any mutation attempting terminal or irrevocable states (`active`, `completed`, `cancelled`, `final`).
    - Normalizes input strings via Unicode NFKC normalization, preventing homoglyph evasion attacks (e.g. Cyrillic `а` or full-width `ａ` substituted for ASCII `a`).
+2. **Compile-Time Affine Typestates**:
+   - For internal Rust developers and native SDK callers, mutating clinical orders from `Draft` to `Active` is structurally impossible without presenting an unforgeable `PhysicianWitness` capability token.
+   - Enforces linear state transitions at compile time for native integrations.
 3. **Deterministic FSM Invariant Verification**:
    - Automated reachability analysis proving that forbidden terminal states are unreachable during agent execution.
    - Comprehensive test assertions evaluating all state transitions across all 5 clinical entities.

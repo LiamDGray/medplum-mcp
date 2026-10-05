@@ -82,7 +82,7 @@ Supported FHIR R4 Resources:
 * **Tamper-Evident Hash Chaining**: Every tool invocation, parameter payload, safety intercept, and upstream response is hashed and appended to a `.jsonl` audit log.
 * **Cryptographic Guarantee**:
   $$\text{Hash}_i = \text{HMAC-SHA256}(K, \text{Payload}_i \mathbin{\Vert} \text{Hash}_{i-1})$$
-* **Compliance Mapping**: Satisfies HIPAA § 164.312(b) Audit Controls, 21 CFR Part 11 electronic signature audit trails, and RFC 3881 / ATNA healthcare audit specifications.
+* **Compliance Mapping**: Satisfies HIPAA § 164.312(b) Audit Controls, with hash-chaining inspired by RFC 3881 / ATNA healthcare audit specifications.
 * **Tamper Detection**: The CLI command `medplum-mcp audit verify` validates chain continuity, sequence numbers, and HMAC signatures in $O(N)$ time.
 
 ### Pillar 5: Hermetic Clinical Sandbox (St. Jude Synthetic Oncology Dataset)
@@ -233,16 +233,17 @@ The transport architecture combines zero-copy Linux pipe IPC with production-gra
 
 ---
 
-## 9. Deterministic Safety Architecture & Typestates
+## 9. Deterministic Safety Architecture & Defense-in-Depth
 
 The system enforces safety across complementary verification mechanisms:
 
-1. **Compile-Time Affine Typestates** ([`crates/medplum-mcp-core/src/typestate.rs`](../crates/medplum-mcp-core/src/typestate.rs)):
-   - Linear typestates guarantee at compile time that an agent cannot transition an order from `Draft` to `Active` without consuming a non-forgeable `PhysicianWitness` capability token.
-   - Preserves state machine integrity via Rust's linear affine type system.
-2. **Deterministic Runtime Safety Gate** ([`medplum_mcp/safety.py`](../medplum_mcp/safety.py)):
-   - Non-bypassable runtime interceptor blocking all terminal and binding mutations (`active`, `completed`, `cancelled`, `final`).
-   - Unicode NFKC normalization and invisible character stripping preventing homoglyph evasion attacks.
+1. **Deterministic Runtime Safety Gate** ([`medplum_mcp/safety.py`](../medplum_mcp/safety.py)):
+   - **Primary Agent Defense Boundary**: External LLM agents communicate via text-based JSON-RPC payloads over stdin/HTTP. The runtime safety interceptor (`assert_write_permitted`) is the non-bypassable barrier protecting the upstream EHR.
+   - Categorically blocks all terminal and binding mutations (`active`, `completed`, `cancelled`, `final`).
+   - Applies Unicode NFKC normalization and invisible character stripping before lookup against forbidden status sets, preventing adversarial homoglyph evasion attacks (e.g., substituting Cyrillic `а` for Latin `a`).
+2. **Compile-Time Affine Typestates** ([`crates/medplum-mcp-core/src/typestate.rs`](../crates/medplum-mcp-core/src/typestate.rs)):
+   - For internal Rust SDK callers and native developers, linear typestates guarantee at compile time that code cannot transition an order from `Draft` to `Active` without consuming a non-forgeable `PhysicianWitness` capability token.
+   - Enforces state machine invariants structurally in Rust without relying solely on runtime checks.
 3. **Automated FSM Invariant Verification**:
    - Evaluates reachability invariants across all 5 clinical state machines (`MedicationRequest`, `AllergyIntolerance`, `Observation`, `DiagnosticReport`, `Claim`).
    - Proves zero forbidden terminal reachability under MCP tool invocation.
@@ -279,5 +280,5 @@ The `medplum-mcp-rs tui` command launches an interactive terminal dashboard rend
 
 The open-source core provides the high-performance zero-copy server, local HMAC audit ledger, St. Jude sandbox, CLI verifier, and Ratatui TUI dashboard. 
 
-Advanced enterprise commercial entitlements (including dynamic HIPAA Safe Harbor de-identification, hardware Ed25519 clinician witness integration, multi-site Merkle DAG audit cloud replication, and multi-tenant DMSA secret resolution) are governed under Enterprise Commercial Licenses. See [`COMMERCIAL.md`](COMMERCIAL.md) for licensing parameters and procurement procedures.
+Commercial production deployments across health systems are backed by Enterprise Commercial Licenses offering production SLAs, executed HIPAA BAAs, enterprise intellectual property indemnification, and custom EHR integrations. See [`COMMERCIAL.md`](COMMERCIAL.md) for licensing parameters and procurement procedures.
 
