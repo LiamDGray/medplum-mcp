@@ -28,11 +28,10 @@ On the Change Date, or earlier if Licensor makes an earlier grant, this License 
 If your organization intends to deploy `medplum-mcp` within a commercial hospital production environment, private healthcare cloud VPC, EHR/EMR integrated automated workflow, or clinical decision support system, an Enterprise Commercial License is required.
 
 The Enterprise Commercial License includes:
-* **Full Legal Indemnification & HIPAA BAA**: Third-party intellectual property indemnification, clinical safety invariant warranty, and HIPAA Business Associate Agreement.
-* **Dynamic Safe Harbor PHI De-Identification**: Automated 18-identifier HIPAA § 164.514 scrubbing and cryptographic salt rotation.
-* **Hardware Clinician Witness Integration**: Ed25519 physical hardware witness tokens for verified provider sign-off.
-* **Multi-Site Merkle DAG Audit Ledger**: Cloud replication of cryptographic flight records for regulatory compliance.
-* **Production SLA & Security Advisory**: Dedicated clinical engineering response, 99.95% uptime SLA, and private CVE notifications.
+* **Full Legal Indemnification & HIPAA BAA**: Third-party intellectual property indemnification, commercial warranty, and executed HIPAA Business Associate Agreement.
+* **Production SLA & Dedicated Support**: 99.95% uptime SLA, 1-hour Sev-1 response times, and dedicated clinical engineering escalation.
+* **Custom Enterprise EHR Connectors**: Architectural guidance and connector engineering for Epic on FHIR, Oracle Cerner Millennium, and private Medplum deployments.
+* **Security & Vulnerability Feeds**: Direct access to core security engineers, private CVE alerts, and proactive release planning.
 
 For procurement, Master Services Agreements (MSA), and custom enterprise quotations, review [docs/COMMERCIAL.md](docs/COMMERCIAL.md) or contact:
 * **Licensing & Procurement**: `licensing@medplum-mcp.org`

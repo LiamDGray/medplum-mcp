@@ -27,40 +27,39 @@ Organizations deploying `medplum-mcp` in enterprise clinical production receive 
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                   ENTERPRISE COMMERCIAL ENTITLEMENTS                   │
+│                   ENTERPRISE COMMERCIAL OFFERINGS                      │
 ├──────────────────────────────────┬─────────────────────────────────────┤
 │   CORE BSL 1.1 EDITION           │       ENTERPRISE COMMERCIAL         │
 │   (Open-Source / Evaluation)     │       (Commercial DMSA License)     │
 ├──────────────────────────────────┼─────────────────────────────────────┤
-│ • Pure Python & Zero-Copy Rust   │ 🔒 Dynamic PHI Safe Harbor          │
-│ • 3-Tier FHIR Token Distillation │    De-Identification Engine         │
-│ • Draft-Only Mutations           │ 🔒 Ed25519 Hardware Physician       │
-│ • Local HMAC-SHA256 Flight Log   │    Witness & DEA EPCS Ingestion     │
-│ • St. Jude Sandbox & Mock Server │ 🔒 Multi-Tenant Merkle DAG          │
-│ • CLI Verifier & Benchmarks      │    Audit Cloud Replication          │
-│ • 60 FPS Ratatui Terminal TUI    │ 🔒 Multi-Vault Secret Enclave       │
-│                                  │    (AWS KMS, HashiCorp Vault DMSA)  │
-│                                  │ 🔒 Enterprise SLA, BAA, & Indemnity │
+│ • Pure Python & Fast Rust Engine │ 🔒 HIPAA Business Associate         │
+│ • 3-Tier FHIR Token Distillation │    Agreement (BAA) Execution        │
+│ • Draft-Only Mutations & Gate    │ 🔒 Enterprise SLA (99.95% Uptime)   │
+│ • Local HMAC-SHA256 Flight Log   │    & 24/7/365 Incident Response     │
+│ • St. Jude Sandbox & Mock Server │ 🔒 Full IP Indemnification          │
+│ • CLI Verifier & Benchmarks      │ 🔒 Custom EHR Integrations          │
+│ • 60 FPS Ratatui Terminal TUI    │    (Epic, Cerner, On-Premise Medplum│
+│                                  │ 🔒 Dedicated Clinical Engineering   │
+│                                  │    Support & Architecture Review    │
 └──────────────────────────────────┴─────────────────────────────────────┘
 ```
 
-### 1. Dynamic PHI Safe Harbor De-Identification & Differential Privacy Engine
-- In-memory, sub-millisecond masking and date-shifting complying strictly with HIPAA 45 CFR § 164.514(b) Safe Harbor standards.
-- Enables clinical teams and pharmaceutical researchers to connect frontier cloud LLMs (Anthropic Claude, OpenAI, Google Gemini) to real hospital datasets without exposing protected health information (PHI) or violating HIPAA privacy regulations.
-- Deterministic patient-specific salt ($\pm \Delta t$) preserves clinical timeline intervals (e.g. chemotherapy cycle spacing) while eliminating re-identification risk.
+### 1. Enterprise Service Level Agreement (SLA) & Critical Support
+- Guaranteed 99.95% production uptime SLA with 1-hour critical response times for Sev-1 operational incidents.
+- Dedicated clinical engineering escalation channel with direct access to core maintainers.
+- Coordinated release planning, patch testing, and zero-downtime migration guidance.
 
-### 2. Ed25519 Hardware Clinician Witness Sign-Off & DEA EPCS Compliance
-- End-to-end cryptographic FSM seam enabling attending physicians to sign off on AI-drafted prescriptions and orders using physical WebAuthn / PKCS#11 hardware keys (YubiKey).
-- Satisfies DEA Electronic Prescriptions for Controlled Substances (EPCS) two-factor authentication rules and state medical board human-in-the-loop mandates.
-- Transitions `MedicationRequest<Draft>` to legally binding `Active` state only upon hardware signature validation.
+### 2. HIPAA Business Associate Agreement (BAA)
+- Legally binding HIPAA Business Associate Agreement executed directly with your covered entity or health system.
+- Formal security posture attestations aligned with HIPAA Security Rule 45 CFR § 164.312 (Audit Controls and Transmission Security).
 
-### 3. Multi-Tenant Distributed Merkle DAG Audit Replication
-- Upgrades local `.jsonl` audit ledgers into a distributed Merkle Tree DAG anchored to consortium transparency logs (RFC 6962 / Sigstore Rekor).
-- Provides multi-hospital health systems with mathematically immutable, decentralized audit proof for forensic discovery and Joint Commission accreditation.
+### 3. Intellectual Property Defense & Full Indemnification
+- Comprehensive, uncapped defense and indemnity against third-party copyright, patent, trade secret, or intellectual property claims.
+- Commercial warranty ensuring license predictability for mission-critical enterprise infrastructure.
 
-### 4. Zero-Trust Multi-Vault Cloud Enclave
-- Enterprise secret resolution integrating directly with enterprise key management systems (AWS KMS, Azure Key Vault, HashiCorp Vault DMSA clusters).
-- Proactive 30-day token rotation, multi-region failover, and hardware security module (HSM) backing.
+### 4. Custom EHR Integrations & Deployment Engineering
+- Tailored connector engineering for proprietary hospital EHR environments (Epic on FHIR, Oracle Cerner Millennium, bespoke on-premise Medplum clusters).
+- Deployment architecture reviews for high-security VPCs, Kubernetes clusters, and air-gapped clinical intranets.
 
 ---
 
