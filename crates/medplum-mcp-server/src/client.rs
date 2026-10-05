@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use medplum_mcp_core::safety::{assert_write_permitted, SafetyViolationError};
 use medplum_mcp_core::secret::SecretString;
-use medplum_mcp_core::token_diet::{distill_resource, DetailLevel};
+use medplum_mcp_core::token_diet::{
+    distill_raw_slice, distill_resource, DetailLevel, TokenDietError,
+};
 use serde_json::{json, Value};
 
 use crate::sandbox::ClinicalSandbox;
@@ -32,6 +34,9 @@ pub enum ClientError {
 
     #[error("JSON serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("Token distillation error: {0}")]
+    Distillation(#[from] TokenDietError),
 }
 
 /// High-assurance Medplum FHIR Client.
@@ -108,6 +113,18 @@ impl MedplumClient {
         match detail {
             Some(level) => distill_resource(&val, level),
             None => val,
+        }
+    }
+
+    async fn parse_and_distill_response(
+        &self,
+        resp: reqwest::Response,
+        detail: Option<DetailLevel>,
+    ) -> Result<Value, ClientError> {
+        let mut bytes = resp.bytes().await?.to_vec();
+        match detail {
+            Some(level) => distill_raw_slice(&mut bytes, level).map_err(ClientError::from),
+            None => serde_json::from_slice(&bytes).map_err(ClientError::from),
         }
     }
 
@@ -193,8 +210,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn search_patients(
@@ -238,8 +255,7 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        self.parse_and_distill_response(resp, detail).await
     }
 
     // -----------------------------------------------------------------------
@@ -279,8 +295,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_observations(
@@ -324,8 +340,7 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        self.parse_and_distill_response(resp, detail).await
     }
 
     pub async fn create_observation_draft(
@@ -432,8 +447,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_medications(
@@ -469,8 +484,7 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        self.parse_and_distill_response(resp, detail).await
     }
 
     pub async fn create_medication_draft(
@@ -577,8 +591,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_conditions(
@@ -607,8 +621,14 @@ impl MedplumClient {
             )
             .await?;
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        self.parse_and_distill_response(resp, detail).await
     }
 
     // -----------------------------------------------------------------------
@@ -648,8 +668,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_allergies(
@@ -678,8 +698,14 @@ impl MedplumClient {
             )
             .await?;
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        self.parse_and_distill_response(resp, detail).await
     }
 
     // -----------------------------------------------------------------------
@@ -719,8 +745,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_diagnostic_reports(
@@ -753,8 +779,14 @@ impl MedplumClient {
             )
             .await?;
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        self.parse_and_distill_response(resp, detail).await
     }
 
     // -----------------------------------------------------------------------
@@ -794,8 +826,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_encounters(
@@ -824,8 +856,14 @@ impl MedplumClient {
             )
             .await?;
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        self.parse_and_distill_response(resp, detail).await
     }
 
     // -----------------------------------------------------------------------
@@ -865,8 +903,8 @@ impl MedplumClient {
             });
         }
 
-        let body: Value = resp.json().await?;
-        Ok(Some(self.apply_distillation(body, detail)))
+        let body = self.parse_and_distill_response(resp, detail).await?;
+        Ok(Some(body))
     }
 
     pub async fn list_care_plans(
@@ -895,7 +933,13 @@ impl MedplumClient {
             )
             .await?;
 
-        let body: Value = resp.json().await?;
-        Ok(self.apply_distillation(body, detail))
+        if !resp.status().is_success() {
+            return Err(ClientError::ServerError {
+                status: resp.status().as_u16(),
+                message: resp.text().await.unwrap_or_default(),
+            });
+        }
+
+        self.parse_and_distill_response(resp, detail).await
     }
 }

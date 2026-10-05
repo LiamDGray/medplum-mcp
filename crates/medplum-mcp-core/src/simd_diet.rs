@@ -300,10 +300,9 @@ pub fn distill_resource_simd<'a>(
                 },
             ))
         }
-        _ => Ok(SimdDistilledResource::Generic(SimdDistilledGeneric {
-            resource_type,
-            id,
-        })),
+        _ => Err(TokenDietError::UnsupportedResourceType(
+            resource_type.to_string(),
+        )),
     }
 }
 
