@@ -249,9 +249,9 @@ The system is mathematically proven across three complementary verification tech
 
 ---
 
-## 10. Empirical 90-Minute Soak Telemetry
+## 10. Empirical Soak Telemetry
 
-The Rust engine was subjected to a continuous 93.6-minute soak test across 16 OS threads:
+The Rust engine was subjected to a continuous soak test across 16 OS threads:
 
 - **Total Operations Executed**: **723,532,992**
 - **Distillation Operations**: **344,539,522** (609,655 ops/sec peak, 1.64 µs mean latency)

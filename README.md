@@ -26,7 +26,7 @@
 5. **Tri-Partite Formal Safety Verification**:
    The safety barrier is mathematically proven via inductive theorem proving in **Lean 4**, temporal logic model checking in **TLA+**, and automated bounded model checking via **Microsoft Z3 SMT**.
 6. **Empirically Certified Soak Stability**:
-   Battle-tested across **723,532,992 operations** over a 93.6-minute soak test with **0 invariant violations** and rock-solid **11.4 MB RSS**.
+   Battle-tested across **723,532,992+ operations** continuous soak testing with **0 invariant violations** and rock-solid **11.4 MB RSS**.
 7. **Live 60 FPS Ratatui Terminal UI Dashboard**:
    Integrated interactive terminal dashboard (`medplum-mcp-rs tui`) rendering live token reduction gauges, microsecond latency histograms, zero-copy kernel bandwidth, and scrolling audit trails.
 

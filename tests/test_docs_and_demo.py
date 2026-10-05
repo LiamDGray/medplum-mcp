@@ -46,12 +46,18 @@ class TestDocumentationSuite:
         for term in banned_hyperbole:
             assert term not in content.lower(), f"README.md contains banned hyperbole: {term!r}"
 
+        # Soak test duration quality: do not boast about 93 minutes
+        assert "93" not in content, "README.md should not reference 93 minutes soak test"
+
     def test_architecture_doc_exists_and_substantial(self) -> None:
         arch_path = REPO_ROOT / "docs" / "ARCHITECTURE.md"
         assert arch_path.exists(), "docs/ARCHITECTURE.md must exist"
         content = arch_path.read_text(encoding="utf-8")
         msg = f"docs/ARCHITECTURE.md must be substantial (>3000 bytes), got {len(content)}"
         assert len(content) >= 3000, msg
+
+        # Soak test duration quality: do not boast about 93 minutes
+        assert "93" not in content, "docs/ARCHITECTURE.md should not reference 93 minutes soak test"
 
         # Quality check: No unsubstantiated hyperbolic buzzwords
         banned_hyperbole = [
