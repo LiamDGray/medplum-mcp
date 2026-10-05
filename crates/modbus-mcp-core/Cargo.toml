@@ -1,0 +1,22 @@
+[package]
+name = "modbus-mcp-core"
+version = "0.1.0"
+edition = "2021"
+description = "High-assurance Industrial IoT Modbus Bridge core: register abstractions, token diet distillation, affine operator safety interlocks, and zero-copy binary audit flight recording"
+license = "Apache-2.0"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+zerocopy = { version = "0.8", features = ["derive"] }
+thiserror = "2.0"
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+proptest = "1.5"
+
+[lints]
+workspace = true
