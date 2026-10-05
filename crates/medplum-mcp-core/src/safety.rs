@@ -35,7 +35,7 @@ pub enum SafetyViolationError {
 }
 
 /// Translate confusable Cyrillic, Greek, and other homoglyphs to Latin ASCII equivalents.
-fn translate_homoglyph(c: char) -> char {
+pub fn translate_homoglyph(c: char) -> char {
     match c {
         // Cyrillic lowercase
         '\u{0430}' => 'a',
@@ -80,7 +80,7 @@ fn translate_homoglyph(c: char) -> char {
 }
 
 /// Returns true if character is an invisible, formatting, or zero-width code point.
-fn is_invisible_char(c: char) -> bool {
+pub fn is_invisible_char(c: char) -> bool {
     matches!(
         c,
         '\u{200b}'..='\u{200f}'

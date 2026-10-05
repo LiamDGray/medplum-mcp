@@ -8,3 +8,6 @@ members = [
 exclude = [
     "fuzz",
 ]
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
