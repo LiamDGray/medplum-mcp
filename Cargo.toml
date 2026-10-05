@@ -6,6 +6,7 @@ members = [
     "crates/medplum-mcp-cli",
     "crates/modbus-mcp-core",
     "crates/modbus-mcp-server",
+    "crates/modbus-mcp-cli",
 ]
 exclude = [
     "fuzz",

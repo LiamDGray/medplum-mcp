@@ -1,0 +1,36 @@
+[package]
+name = "modbus-mcp-cli"
+version = "0.1.0"
+edition = "2021"
+description = "CLI entrypoint, multi-client config generator, and cryptographic audit verifier for Industrial IoT Modbus Bridge"
+license = "Apache-2.0"
+
+[[bin]]
+name = "modbus-mcp-rs"
+path = "src/main.rs"
+
+[lib]
+name = "modbus_mcp_cli"
+path = "src/lib.rs"
+
+[dependencies]
+modbus-mcp-core = { path = "../modbus-mcp-core", version = "0.1.0" }
+modbus-mcp-server = { path = "../modbus-mcp-server", version = "0.1.0" }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+colored = "2.2"
+thiserror = "2.0"
+tempfile = "3"
+zerocopy = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1"] }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

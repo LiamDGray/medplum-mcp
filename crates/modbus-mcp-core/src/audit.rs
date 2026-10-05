@@ -219,6 +219,11 @@ impl MachineFlightRecorder {
         header.as_bytes().to_vec()
     }
 
+    /// Access the slice of recorded binary audit headers.
+    pub fn frames(&self) -> &[BinaryAuditHeader] {
+        &self.frames
+    }
+
     /// Verifies the entire audit log sequence and cryptographic signature chain.
     pub fn verify_chain(&self) -> Result<(), ModbusError> {
         let mut expected_seq = 1u64;
