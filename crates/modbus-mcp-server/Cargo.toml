@@ -1,0 +1,26 @@
+[package]
+name = "modbus-mcp-server"
+version = "0.1.0"
+edition = "2021"
+description = "High-assurance Industrial IoT Modbus Bridge MCP server with virtual PLC simulation and streamable HTTP transport"
+license = "Apache-2.0"
+
+[dependencies]
+modbus-mcp-core = { path = "../modbus-mcp-core", version = "0.1.0" }
+tokio = { version = "1", features = ["full"] }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "query"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+uuid = { version = "1.27", features = ["v4"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
