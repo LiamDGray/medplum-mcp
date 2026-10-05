@@ -60,4 +60,5 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 *.log
+soak_tally.json
 
